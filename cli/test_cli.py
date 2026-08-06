@@ -19,7 +19,7 @@ class TestCliCommands(unittest.TestCase):
     def test_node_help(self):
         result = runner.invoke(app, ["node", "--help"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("Manage micro-VM compute nodes", result.output)
+        self.assertIn("Manage Compute Nodes", result.output)
 
     def test_ssh_help(self):
         result = runner.invoke(app, ["ssh", "--help"])

@@ -7,7 +7,7 @@ from .auth.login import app as auth_app
 
 app = typer.Typer(
     name="np",
-    help="Nodepick CLI - Manage micro-VM compute nodes, SSH keys, and authentication.",
+    help="Nodepick CLI - Manage compute nodes, SSH keys, and authentication.",
     add_completion=False,
 )
 console = Console()

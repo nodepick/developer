@@ -102,14 +102,14 @@ class TestNodepickClient(unittest.TestCase):
         client = NodePickClient(api_key="test-key")
         mock_details = {
             "connect": {
-                "nmcpUrl": "https://lax1-mg1.entic.net:10010",
-                "nmcpApiKey": "secret-mcp-key"
+                "mcpUrl": "https://fmt1-sr3.entic.net:10010",
+                "mcpApiKey": "secret-mcp-key"
             }
         }
         with patch.object(client, "node_get_details", return_value=mock_details):
             mcp_client = client.mcp("node-123")
             self.assertIsInstance(mcp_client, NodepickMCPClient)
-            self.assertEqual(mcp_client.url, "https://lax1-mg1.entic.net:10010")
+            self.assertEqual(mcp_client.url, "https://fmt1-sr3.entic.net:10010")
             self.assertEqual(mcp_client.api_key, "secret-mcp-key")
         client.close()
 

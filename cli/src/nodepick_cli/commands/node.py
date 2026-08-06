@@ -9,7 +9,7 @@ from ..core.formatters import OutputFormat, set_output_format, get_output_format
 
 
 
-app = typer.Typer(name="node", help="Manage micro-VM compute nodes.")
+app = typer.Typer(name="node", help="Manage Compute Nodes.")
 console = Console()
 
 from click.core import ParameterSource

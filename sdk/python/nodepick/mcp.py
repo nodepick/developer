@@ -26,10 +26,10 @@ def create_pq_ssl_context() -> ssl.SSLContext:
 class NodepickMCPClient:
     def __init__(self, node_details: Dict[str, Any]):
         connect = (node_details or {}).get("connect") or {}
-        self.url = connect.get("nmcpUrl")
-        self.api_key = connect.get("nmcpApiKey") or connect.get("nmcpdApiKey")
+        self.url = connect.get("mcpUrl")
+        self.api_key = connect.get("mcpApiKey")
         if not self.url or not self.api_key:
-            raise ValueError("Node details do not contain a valid MCP endpoint ('nmcpUrl') or API key ('nmcpApiKey').")
+            raise ValueError("Node details do not contain a valid MCP endpoint ('mcpUrl') or API key ('mcpApiKey').")
 
     def _get_headers(self) -> Dict[str, str]:
         headers = {}

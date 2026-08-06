@@ -77,7 +77,7 @@ with client:
 
 ### 2. Connect to the Guest VM MCP Server
 
-Directly interact with the zero-dependency Guest VM MCP server (`nmcpd`) over a secure, Streamable HTTP connection. The client automatically configures TLS to exclusively negotiate post-quantum hybrid groups (`X25519MLKEM768`).
+Directly interact with the zero-dependency Guest VM MCP server (`mcp`) over a secure, Streamable HTTP connection. The client automatically configures TLS to exclusively negotiate post-quantum hybrid groups (`X25519MLKEM768`).
 
 ```python
 from nodepick import NodePickClient

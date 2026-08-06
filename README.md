@@ -12,7 +12,7 @@ This repository contains the developer tools for interacting with Nodepick:
 ## Key Capabilities
 
 - **Micro-VM Orchestration**: Spin up, scale, reboot, and tear down secure compute nodes in seconds.
-- **Post-Quantum Cryptography**: Direct Guest VM MCP server (`nmcpd`) access over HTTP/PQC-TLS (`X25519MLKEM768`).
+- **Post-Quantum Cryptography**: Direct Guest VM MCP server (`mcp`) access over HTTP/PQC-TLS (`X25519MLKEM768`).
 - **LLM Agent Loops**: First-class support for autonomous agent execution with Ollama, Google Gemini, Anthropic, and OpenAI models.
 - **Developer CLI**: Manage nodes, SSH access, and environment authentication directly from your terminal.
 
