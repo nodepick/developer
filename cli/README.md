@@ -1,6 +1,6 @@
-# Nodepick CLI (`np`)
+# nodepick.ai CLI (`np`)
 
-`np` is a command-line interface tool built with Python and [Typer](https://typer.tiangolo.com/) for managing Nodepick compute nodes on Linux and macOS.
+`np` is a command-line interface tool built with Python for managing Compute nodes.
 
 ## Installation
 
