@@ -24,5 +24,9 @@ np = "nodepick_cli.main:app"
 [tool.hatch.build.targets.wheel]
 packages = ["src/nodepick_cli"]
 
+[tool.uv.sources]
+nodepick = { path = "../sdk/python" }
+
+
 
 

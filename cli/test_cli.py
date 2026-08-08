@@ -16,6 +16,16 @@ class TestCliCommands(unittest.TestCase):
         self.assertIn("node", result.output)
         self.assertIn("auth", result.output)
 
+    def test_version(self):
+        result = runner.invoke(app, ["--version"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("nodepick CLI version 0.1.0", result.output)
+
+    def test_version_short(self):
+        result = runner.invoke(app, ["-v"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("nodepick CLI version 0.1.0", result.output)
+
     def test_node_help(self):
         result = runner.invoke(app, ["node", "--help"])
         self.assertEqual(result.exit_code, 0)

@@ -4,24 +4,17 @@
 
 ## Installation
 
-### One-Line Shell Installer (`curl`)
+### Recommended Method using Shell Installer (`curl`)
 
 ```bash
-# Install using auto-detection (uv -> pipx -> pip -> git)
+# Install using auto-detection (uv -> pipx -> pip)
 curl -sSL https://raw.githubusercontent.com/nodepick/developer/main/cli/install.sh | bash
 
-# Install directly from Git repository
+# Install latest from Git repo
 curl -sSL https://raw.githubusercontent.com/nodepick/developer/main/cli/install.sh | bash -s -- --mode git
-
-# Explicitly install via pipx or pip
-curl -sSL https://raw.githubusercontent.com/nodepick/developer/main/cli/install.sh | bash -s -- --mode pipx
-curl -sSL https://raw.githubusercontent.com/nodepick/developer/main/cli/install.sh | bash -s -- --mode pip
-
-# Preview installation without running commands
-curl -sSL https://raw.githubusercontent.com/nodepick/developer/main/cli/install.sh | bash -s -- --dry-run
 ```
 
-### Recommended Method (`uv`)
+### Recommended Method using (`uv`)
 
 Using [`uv`](https://github.com/astral-sh/uv) is the recommended way to install and manage the `np` CLI tool globally in an isolated environment:
 
@@ -54,84 +47,21 @@ pip install -e ../sdk/python .
 
 ## Usage
 
-### Global Options
+[`nodepick.ai Documentation`](https://docs.nodepick.ai/cli-reference/overview)
 
-- `--debug`, `-d`: Enable DEBUG logging output. Default is disabled.
 
-```bash
-# Output list as Rich table (default)
-np node list
-
-# Output list as raw formatted JSON
-np node list -f json
-
-# Output node details as raw JSON
-np node get <node_id> -f json
-
-# Output SSH keys list as raw JSON
-np ssh list -f json
-
-# Enable debug logging output
-np --debug node list
-```
-
-### Node Management Commands (`np node`)
+### Basic Usage
 
 ```bash
 # List all compute nodes (table view with SSH connect command)
-np node list
-
-# Output compute nodes as raw formatted JSON
-np node list -f json
-
-# Deploy a new compute node (custom name, cpu, memory MB, network, storage GB)
-np node create --name my-vm --cpu 2 --memory 1024 --network private --storage 20
-
-# Get detailed info for a specific node (by ID, VM UUID, or display name)
-np node get <node_id>
-
-# Output node details as raw formatted JSON
-np node get <node_id> -f json
-
-# List Guest VM MCP tools exposed by node
-np node tools <node_id>
-
-# Boot, Shutdown, or Reboot a node
-np node boot <node_id>
-np node shutdown <node_id>
-np node reboot <node_id>
-
-# Delete a compute node
-np node delete <node_id>
+np --version
 ```
 
-### SSH Key Management Commands (`np ssh`)
-
-```bash
-# List all registered SSH public keys
-np ssh list
-
-# Output SSH keys list as raw JSON
-np ssh list -f json
-
-# Add an SSH public key from a file
-np ssh add --name my-key --file ~/.ssh/id_ed25519.pub
-
-# Add an SSH public key from a raw key string
-np ssh add --name dev-key --key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
-
-# Delete an SSH key
-np ssh delete <key_id>
-```
-
-### Authentication Commands (`np auth`)
+### Test authentication
 
 ```bash
 # Save API key (and optional base URL) securely in OS keyring
 np auth save
-
-# Save API key non-interactively
-np auth save --api-key <your_api_key>
 
 # Test API authentication status & organization details
 np auth test
