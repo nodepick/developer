@@ -4,6 +4,23 @@
 
 ## Installation
 
+### One-Line Shell Installer (`curl`)
+
+```bash
+# Install using auto-detection (uv -> pipx -> pip -> git)
+curl -sSL https://raw.githubusercontent.com/nodepick/developer/main/cli/install.sh | bash
+
+# Install directly from Git repository
+curl -sSL https://raw.githubusercontent.com/nodepick/developer/main/cli/install.sh | bash -s -- --mode git
+
+# Explicitly install via pipx or pip
+curl -sSL https://raw.githubusercontent.com/nodepick/developer/main/cli/install.sh | bash -s -- --mode pipx
+curl -sSL https://raw.githubusercontent.com/nodepick/developer/main/cli/install.sh | bash -s -- --mode pip
+
+# Preview installation without running commands
+curl -sSL https://raw.githubusercontent.com/nodepick/developer/main/cli/install.sh | bash -s -- --dry-run
+```
+
 ### Recommended Method (`uv`)
 
 Using [`uv`](https://github.com/astral-sh/uv) is the recommended way to install and manage the `np` CLI tool globally in an isolated environment:
