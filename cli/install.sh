@@ -5,6 +5,7 @@ VERSION="0.0.1"
 PACKAGE_NAME="nodepick-cli"
 SDK_PACKAGE_NAME="nodepick"
 GIT_URL="git+https://github.com/nodepick/developer#subdirectory=cli"
+GIT_URL_SDK="git+https://github.com/nodepick/developer#subdirectory=sdk/python"
 
 # Defaults
 MODE="auto"
@@ -193,7 +194,7 @@ install_git() {
     log "Found uv: $(command -v uv)"
     log "Found git: $(command -v git)"
     log_step "Installing ${PACKAGE_NAME} from Git repository via uv tool (${GIT_URL})..."
-    run_cmd uv tool install "${GIT_URL}"
+    run_cmd uv tool install "${GIT_URL}" --with "${GIT_URL_SDK}"
     log_success "Successfully installed ${PACKAGE_NAME} from Git repository via uv tool."
 }
 
