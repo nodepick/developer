@@ -30,11 +30,11 @@ Options:
   --version         Show installer version
 
 Installation Modes:
-  auto    Detect best method: tries uv -> pipx -> pip -> git
+  auto    Detect best method: tries uv -> pipx -> pip
   uv      Install via uv tool
   pipx    Install via pipx
   pip     Install directly via python pip
-  git     Install directly from GitHub repository via pip
+  git     Install directly from GitHub repository via uv tool
 EOF
 }
 
@@ -178,33 +178,23 @@ install_pip() {
 }
 
 install_git() {
-    log_step "Checking for 'git' and Python..."
+    log_step "Checking for 'uv' and 'git'..."
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "Error: 'uv' binary not found in PATH." >&2
+        echo "Please install uv (https://github.com/astral-sh/uv)." >&2
+        exit 1
+    fi
+
     if ! command -v git >/dev/null 2>&1; then
-        if [[ "$MODE" == "git" ]]; then
-            echo "Error: 'git' binary not found in PATH." >&2
-            exit 1
-        fi
-        return 1
+        echo "Error: 'git' binary not found in PATH." >&2
+        exit 1
     fi
 
-    local python_bin=""
-    if command -v python3 >/dev/null 2>&1; then
-        python_bin="python3"
-    elif command -v python >/dev/null 2>&1; then
-        python_bin="python"
-    else
-        if [[ "$MODE" == "git" ]]; then
-            echo "Error: Neither python3 nor python found in PATH." >&2
-            exit 1
-        fi
-        return 1
-    fi
-
+    log "Found uv: $(command -v uv)"
     log "Found git: $(command -v git)"
-    log "Using Python: $($python_bin --version 2>&1)"
-    log_step "Installing ${PACKAGE_NAME} from Git repository (${GIT_URL})..."
-    run_cmd "$python_bin" -m pip install --upgrade "${GIT_URL}"
-    log_success "Successfully installed ${PACKAGE_NAME} from Git repository."
+    log_step "Installing ${PACKAGE_NAME} from Git repository via uv tool (${GIT_URL})..."
+    run_cmd uv tool install "${GIT_URL}"
+    log_success "Successfully installed ${PACKAGE_NAME} from Git repository via uv tool."
 }
 
 # Main execution
@@ -227,7 +217,7 @@ case "$MODE" in
         install_git
         ;;
     auto)
-        log_step "Detecting best installation method (uv -> pipx -> pip -> git)..."
+        log_step "Detecting best installation method (uv -> pipx -> pip)..."
         if install_uv; then
             :
         elif install_pipx; then
@@ -235,7 +225,8 @@ case "$MODE" in
         elif install_pip; then
             :
         else
-            install_git
+            echo "Error: Could not install via uv, pipx, or pip." >&2
+            exit 1
         fi
         ;;
 esac
