@@ -70,23 +70,19 @@ def _render_nodes_table(nodes, client=None):
         )
     console.print(table)
 
-@app.command("list")
-def node_list(
-    format: OutputFormat = typer.Option(
-        OutputFormat.TABLE,
-        "--format", "-f",
-        help="Output format (table or json).",
-        case_sensitive=False,
-    ),
+@app.command("boot")
+def node_boot(
+    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name to boot"),
 ):
-    """List all compute nodes."""
-    set_output_format(format)
+    """Boot a node."""
     client = get_client()
     try:
-        nodes = client.node_list()
-        print_output(nodes, table_render_func=lambda data: _render_nodes_table(data, client))
+        console.print(f"[cyan]Booting node {node_id}...[/cyan]")
+        res = client.node_boot(node_id)
+        console.print(f"[bold green]Node {node_id} boot request sent.[/bold green]")
     except Exception as e:
-        handle_error(e, "Error listing nodes")
+        handle_error(e, "Error booting node")
+
 
 @app.command("create")
 def node_create(
@@ -113,41 +109,19 @@ def node_create(
     except Exception as e:
         handle_error(e, "Error creating node")
 
-def _render_node_details_table(node):
-    if not node:
-        console.print("[yellow]No node details found.[/yellow]")
-        return
 
-    table = Table("Field", "Value")
-    fields = [
-        ("VM UUID", node.get("vm_uuid")),
-        ("ID", node.get("id")),
-        ("Org ID", node.get("orgId") or node.get("org_id")),
-        ("User ID", node.get("created_by_id")),
-        ("Server ID", node.get("serverId") or node.get("server_id")),
-        ("Name", node.get("display_name")),
-        ("State", node.get("state")),
-        ("Status", node.get("status")),
-        ("SSH Connect", _extract_ssh_command(node)),
-        ("CPU Cores", node.get("cpu")),
-        (
-            "Memory (MB)",
-            round(node.get("memory_bytes") / (1024 * 1024))
-            if node.get("memory_bytes") is not None
-            else node.get("memory_mb"),
-        ),
-        (
-            "Storage (GB)",
-            round(node.get("storage_bytes") / (1024 * 1024 * 1024))
-            if node.get("storage_bytes") is not None
-            else node.get("storage_gb"),
-        ),
-        ("Region", node.get("region")),
-    ]
-    for field, value in fields:
-        if value is not None:
-            table.add_row(field, str(value))
-    console.print(table)
+@app.command("delete")
+def node_delete(
+    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name to delete"),
+):
+    """Delete a compute node."""
+    client = get_client()
+    try:
+        console.print(f"[cyan]Deleting node {node_id}...[/cyan]")
+        res = client.node_delete(node_id)
+        console.print(f"[bold green]Node {node_id} deleted.[/bold green]")
+    except Exception as e:
+        handle_error(e, "Error deleting node")
 
 
 @app.command("get")
@@ -169,31 +143,25 @@ def node_get(
     except Exception as e:
         handle_error(e, "Error getting node details")
 
-@app.command("delete")
-def node_delete(
-    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name to delete"),
-):
-    """Delete a compute node."""
-    client = get_client()
-    try:
-        console.print(f"[cyan]Deleting node {node_id}...[/cyan]")
-        res = client.node_delete(node_id)
-        console.print(f"[bold green]Node {node_id} deleted.[/bold green]")
-    except Exception as e:
-        handle_error(e, "Error deleting node")
 
-@app.command("shutdown")
-def node_shutdown(
-    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name to shut down"),
+@app.command("list")
+def node_list(
+    format: OutputFormat = typer.Option(
+        OutputFormat.TABLE,
+        "--format", "-f",
+        help="Output format (table or json).",
+        case_sensitive=False,
+    ),
 ):
-    """Gracefully shut down a node."""
+    """List all compute nodes."""
+    set_output_format(format)
     client = get_client()
     try:
-        console.print(f"[cyan]Shutting down node {node_id}...[/cyan]")
-        res = client.node_shutdown(node_id)
-        console.print(f"[bold green]Node {node_id} shutdown request sent.[/bold green]")
+        nodes = client.node_list()
+        print_output(nodes, table_render_func=lambda data: _render_nodes_table(data, client))
     except Exception as e:
-        handle_error(e, "Error shutting down node")
+        handle_error(e, "Error listing nodes")
+
 
 @app.command("reboot")
 def node_reboot(
@@ -208,53 +176,21 @@ def node_reboot(
     except Exception as e:
         handle_error(e, "Error rebooting node")
 
-@app.command("boot")
-def node_boot(
-    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name to boot"),
+
+@app.command("shutdown")
+def node_shutdown(
+    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name to shut down"),
 ):
-    """Boot a node."""
+    """Gracefully shut down a node."""
     client = get_client()
     try:
-        console.print(f"[cyan]Booting node {node_id}...[/cyan]")
-        res = client.node_boot(node_id)
-        console.print(f"[bold green]Node {node_id} boot request sent.[/bold green]")
+        console.print(f"[cyan]Shutting down node {node_id}...[/cyan]")
+        res = client.node_shutdown(node_id)
+        console.print(f"[bold green]Node {node_id} shutdown request sent.[/bold green]")
     except Exception as e:
-        handle_error(e, "Error booting node")
+        handle_error(e, "Error shutting down node")
 
 
-def _render_mcp_tools_table(tools):
-    if not tools:
-        console.print("[yellow]No MCP tools found.[/yellow]")
-        return
-
-    table = Table("Tool Name", "Description")
-    for tool in tools:
-        name = tool.get("name", "N/A")
-        desc = tool.get("description", "") or ""
-        table.add_row(str(name), str(desc))
-    console.print(table)
-
-
-@app.command("tools")
-def node_tools(
-    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name"),
-    format: OutputFormat = typer.Option(
-        OutputFormat.TABLE,
-        "--format", "-f",
-        help="Output format (table or json).",
-        case_sensitive=False,
-    ),
-):
-    """List all MCP tools exposed by a compute node."""
-    import asyncio
-    set_output_format(format)
-    client = get_client()
-    try:
-        mcp_client = client.mcp(node_id)
-        tools = asyncio.run(mcp_client.list_tools())
-        print_output(tools, table_render_func=_render_mcp_tools_table)
-    except Exception as e:
-        handle_error(e, f"Error fetching MCP tools for node {node_id}")
 
 
 

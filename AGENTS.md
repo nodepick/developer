@@ -185,29 +185,7 @@ Resource managers (files, commands, desktop, etc.) are created on first access v
 
 ## Common Patterns
 
-### Creating and Using Sandboxes
+### Creating and Using Nodes
 ```python
-# Sync
-sandbox = Sandbox.create(template="code-interpreter")
-result = sandbox.run_code("print('Hello')")
-sandbox.kill()
-
-# Async
-async with AsyncSandbox.create(template="code-interpreter") as sandbox:
-    result = await sandbox.run_code("console.log('Hello')")
 ```
 
-### Environment Variables
-
-Environment variables can be set during sandbox creation or after creation.
-
-```python
-# Set during creation (recommended)
-sandbox = Sandbox.create(
-    template="code-interpreter",
-    env_vars={
-        "API_KEY": "sk-prod-xyz",
-        "DATABASE_URL": "postgres://localhost/db",
-        "DEBUG": "true"
-    }
-)

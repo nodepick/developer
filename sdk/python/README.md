@@ -145,26 +145,17 @@ async def main():
 
 ## Publishing to PyPI
 
-To build and publish this SDK package to PyPI:
+To build and publish this SDK package to PyPI using [`uv`](https://github.com/astral-sh/uv):
 
-1. **Install build tools**:
+1. **Build the package**:
    ```bash
-   pip install build twine
+   uv build
    ```
+   This generates distribution archives (`.tar.gz` and `.whl`) in the `dist/` directory.
 
-2. **Build the package**:
+2. **Publish to PyPI**:
    ```bash
-   python -m build
+   uv publish
    ```
-   This generates the distribution archives (both `.tar.gz` and `.whl`) in the `dist/` directory.
+   *Note: You can pass `--token <your-pypi-token>` or set `UV_PUBLISH_TOKEN` in your environment.*
 
-3. **Verify build output**:
-   ```bash
-   twine check dist/*
-   ```
-
-4. **Upload to PyPI**:
-   ```bash
-   twine upload dist/*
-   ```
-   *Note: You will be prompted to enter your PyPI token (use `__token__` as username and your actual PyPI token as the password).*

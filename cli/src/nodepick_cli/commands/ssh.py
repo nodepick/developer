@@ -47,25 +47,6 @@ def _render_ssh_keys_table(keys):
     console.print(table)
 
 
-@app.command("list")
-def list_ssh_keys(
-    format: OutputFormat = typer.Option(
-        OutputFormat.TABLE,
-        "--format", "-f",
-        help="Output format (table or json).",
-        case_sensitive=False,
-    ),
-):
-    """List all organization SSH keys."""
-    set_output_format(format)
-    client = get_client()
-    try:
-        keys = client.ssh_list()
-        print_output(keys, table_render_func=_render_ssh_keys_table)
-    except Exception as e:
-        handle_error(e, "Error listing SSH keys")
-
-
 @app.command("add")
 def add_ssh_key(
     name: str = typer.Option(..., "--name", "-n", help="Friendly name for the SSH key"),
@@ -100,3 +81,22 @@ def delete_ssh_key(
         console.print(f"[bold green]SSH key {key_id} deleted.[/bold green]")
     except Exception as e:
         handle_error(e, "Error deleting SSH key")
+
+
+@app.command("list")
+def list_ssh_keys(
+    format: OutputFormat = typer.Option(
+        OutputFormat.TABLE,
+        "--format", "-f",
+        help="Output format (table or json).",
+        case_sensitive=False,
+    ),
+):
+    """List all organization SSH keys."""
+    set_output_format(format)
+    client = get_client()
+    try:
+        keys = client.ssh_list()
+        print_output(keys, table_render_func=_render_ssh_keys_table)
+    except Exception as e:
+        handle_error(e, "Error listing SSH keys")

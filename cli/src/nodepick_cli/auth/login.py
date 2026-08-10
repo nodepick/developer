@@ -4,7 +4,7 @@ from typing import Optional
 from rich.console import Console
 import keyring
 import nodepick
-from ..core.config import get_api_key, get_base_url, load_config
+from ..core.config import get_api_key, get_base_url, load_config, save_config
 from ..core.exceptions import handle_error
 
 KEYRING_SERVICE = "nodepick-cli"
@@ -45,6 +45,16 @@ def _keyring_delete(key_name: str) -> None:
         pass  # already absent
 
 
+@app.command("clear")
+def auth_clear():
+    """Remove the API key from the OS keyring."""
+    try:
+        _keyring_delete(KEYRING_API_KEY)
+        console.print("[bold green]API key cleared from OS keyring.[/bold green]")
+    except Exception as e:
+        handle_error(e, "Failed to clear credentials")
+
+
 @app.command("save")
 def auth_save(
     api_key: Optional[str] = typer.Option(
@@ -71,16 +81,6 @@ def auth_save(
         )
     except Exception as e:
         handle_error(e, "Failed to save credentials")
-
-
-@app.command("clear")
-def auth_clear():
-    """Remove the API key from the OS keyring."""
-    try:
-        _keyring_delete(KEYRING_API_KEY)
-        console.print("[bold green]API key cleared from OS keyring.[/bold green]")
-    except Exception as e:
-        handle_error(e, "Failed to clear credentials")
 
 
 @app.command("test")

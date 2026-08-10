@@ -62,6 +62,11 @@ class TestCliCommands(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Test API access", result.output)
 
+    def test_auth_save_interactive(self):
+        result = runner.invoke(app, ["auth", "save"], input="test_api_key_123\n")
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Credentials saved", result.output)
+
 
 if __name__ == "__main__":
     unittest.main()

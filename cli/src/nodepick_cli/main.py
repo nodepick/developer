@@ -50,9 +50,9 @@ def main_callback(
         logger.addHandler(handler)
 
 # Register command sub-groups
+app.add_typer(auth_app, name="auth")
 app.add_typer(node_app, name="node")
 app.add_typer(ssh_app, name="ssh")
-app.add_typer(auth_app, name="auth")
 
 if __name__ == "__main__":
     app()

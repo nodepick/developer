@@ -69,3 +69,22 @@ np auth test
 # Clear stored API key from OS keyring
 np auth clear
 ```
+
+---
+
+## Publishing to PyPI
+
+To build and publish the CLI package to PyPI using [`uv`](https://github.com/astral-sh/uv):
+
+1. **Build the package**:
+   ```bash
+   uv build
+   ```
+   This generates distribution archives (`.tar.gz` and `.whl`) in the `dist/` directory.
+
+2. **Publish to PyPI**:
+   ```bash
+   uv publish
+   ```
+   *Note: You can pass `--token <your-pypi-token>` or set `UV_PUBLISH_TOKEN` in your environment.*
+
