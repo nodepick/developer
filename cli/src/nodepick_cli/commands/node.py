@@ -55,7 +55,7 @@ def _render_nodes_table(nodes, client=None):
         console.print("[yellow]No nodes found.[/yellow]")
         return
 
-    table = Table("VM UUID", "Name", "State", Column("SSH Connect", no_wrap=True))
+    table = Table("ID", "Name", "State", Column("SSH Connect", no_wrap=True))
     for node in nodes:
         node_id = node.get("vm_uuid") or node.get("vmUuid") or node.get("vmId") or node.get("id", "N/A")
         name = node.get("display_name") or node.get("displayName") or "N/A"
@@ -72,7 +72,7 @@ def _render_nodes_table(nodes, client=None):
 
 @app.command("boot")
 def node_boot(
-    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name to boot"),
+    node_id: str = typer.Argument(..., help="Node ID or display name to boot"),
 ):
     """Boot a node."""
     client = get_client()
@@ -105,14 +105,14 @@ def node_create(
             storage_gb=storage_gb,
         )
         node_id = node.get("vm_uuid")
-        console.print(f"[bold green]Node created successfully![/bold green] VM UUID: {node_id}")
+        console.print(f"[bold green]Node created successfully![/bold green] ID: {node_id}")
     except Exception as e:
         handle_error(e, "Error creating node")
 
 
 @app.command("delete")
 def node_delete(
-    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name to delete"),
+    node_id: str = typer.Argument(..., help="Node ID or display name to delete"),
 ):
     """Delete a compute node."""
     client = get_client()
@@ -124,9 +124,45 @@ def node_delete(
         handle_error(e, "Error deleting node")
 
 
+def _render_node_details_table(node):
+    if not node:
+        console.print("[yellow]No node details found.[/yellow]")
+        return
+
+    table = Table("Field", "Value")
+    fields = [
+        ("ID", node.get("vm_uuid") or node.get("id")),
+        ("Org ID", node.get("orgId") or node.get("org_id")),
+        ("User ID", node.get("created_by_id")),
+        ("Server ID", node.get("serverId") or node.get("server_id")),
+        ("Name", node.get("display_name")),
+        ("State", node.get("state")),
+        ("Status", node.get("status")),
+        ("SSH Connect", _extract_ssh_command(node)),
+        ("CPU Cores", node.get("cpu")),
+        (
+            "Memory (MB)",
+            round(node.get("memory_bytes") / (1024 * 1024))
+            if node.get("memory_bytes") is not None
+            else node.get("memory_mb"),
+        ),
+        (
+            "Storage (GB)",
+            round(node.get("storage_bytes") / (1024 * 1024 * 1024))
+            if node.get("storage_bytes") is not None
+            else node.get("storage_gb"),
+        ),
+        ("Region", node.get("region")),
+    ]
+    for field, value in fields:
+        if value is not None:
+            table.add_row(field, str(value))
+    console.print(table)
+
+
 @app.command("get")
 def node_get(
-    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name"),
+    node_id: str = typer.Argument(..., help="Node ID or display name"),
     format: OutputFormat = typer.Option(
         OutputFormat.TABLE,
         "--format", "-f",
@@ -165,7 +201,7 @@ def node_list(
 
 @app.command("reboot")
 def node_reboot(
-    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name to reboot"),
+    node_id: str = typer.Argument(..., help="Node ID or display name to reboot"),
 ):
     """Reboot a node."""
     client = get_client()
@@ -179,7 +215,7 @@ def node_reboot(
 
 @app.command("shutdown")
 def node_shutdown(
-    node_id: str = typer.Argument(..., help="Node ID, VM UUID, or display name to shut down"),
+    node_id: str = typer.Argument(..., help="Node ID or display name to shut down"),
 ):
     """Gracefully shut down a node."""
     client = get_client()

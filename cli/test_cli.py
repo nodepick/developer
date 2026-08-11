@@ -31,6 +31,11 @@ class TestCliCommands(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Manage Compute Nodes", result.output)
 
+    def test_node_get_help(self):
+        result = runner.invoke(app, ["node", "get", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Get details of a specific node", result.output)
+
     def test_ssh_help(self):
         result = runner.invoke(app, ["ssh", "--help"])
         self.assertEqual(result.exit_code, 0)
