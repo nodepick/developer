@@ -68,24 +68,21 @@ def node_reboot(node_id: str) -> Dict[str, Any]:
 def node_boot(node_id: str) -> Dict[str, Any]:
     return _get_default_client().node_boot(node_id)
 
-def ssh_list() -> List[Dict[str, Any]]:
-    return _get_default_client().ssh_list()
+def key_list(key_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    return _get_default_client().key_list(key_type=key_type)
 
-def ssh_add(name: str, ssh_public_key: str) -> Dict[str, Any]:
-    return _get_default_client().ssh_add(name=name, ssh_public_key=ssh_public_key)
+def key_create(
+    name: str,
+    key_type: str = "api_key",
+    ssh_public_key: Optional[str] = None,
+    permissions: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    return _get_default_client().key_create(
+        name=name, key_type=key_type, ssh_public_key=ssh_public_key, permissions=permissions
+    )
 
-def ssh_delete(key_id: str) -> Dict[str, Any]:
-    return _get_default_client().ssh_delete(key_id)
-
-# Backwards compatibility aliases
-list_nodes = node_list
-create_node = node_create
-wait_for_nodes = node_wait
-get_node_details = node_get_details
-delete_node = node_delete
-shutdown_node = node_shutdown
-reboot_node = node_reboot
-boot_node = node_boot
+def key_delete(key_id: str) -> Dict[str, Any]:
+    return _get_default_client().key_delete(key_id)
 
 __all__ = [
     "NodePickClient",
@@ -104,17 +101,9 @@ __all__ = [
     "node_shutdown",
     "node_reboot",
     "node_boot",
-    "ssh_list",
-    "ssh_add",
-    "ssh_delete",
-    "list_nodes",
-    "create_node",
-    "wait_for_nodes",
-    "get_node_details",
-    "delete_node",
-    "shutdown_node",
-    "reboot_node",
-    "boot_node",
+    "key_list",
+    "key_create",
+    "key_delete",
 ]
 
 

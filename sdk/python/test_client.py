@@ -113,17 +113,5 @@ class TestNodepickClient(unittest.TestCase):
             self.assertEqual(mcp_client.api_key, "secret-mcp-key")
         client.close()
 
-    @patch("httpx.Client")
-    def test_aliases(self, mock_client_cls):
-        client = NodePickClient(api_key="test-key")
-        self.assertEqual(client.create_node, client.node_create)
-        self.assertEqual(client.list_nodes, client.node_list)
-        self.assertEqual(client.wait_for_nodes, client.node_wait)
-        self.assertEqual(client.get_node_details, client.node_get_details)
-        self.assertEqual(client.delete_node, client.node_delete)
-        self.assertEqual(client.shutdown_node, client.node_shutdown)
-        self.assertEqual(client.reboot_node, client.node_reboot)
-        client.close()
-
 if __name__ == "__main__":
     unittest.main()

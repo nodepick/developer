@@ -46,8 +46,8 @@ client = NodePickClient(api_key="your-developer-api-key", base_url="https://api.
 
 with client:
     # 1. Create a compute node
-    node = client.create_node(
-        memory_mb=1024,
+    node = client.node_create(
+        memory=1024 * 1024 * 1024,
         cpu=2,
         network_type="public",
         display_name="pqc-agent-sandbox"
@@ -56,21 +56,21 @@ with client:
     print(f"Created node: {node_id}")
 
     # 2. Get node details (including VMM status, SSH options, and MCP configuration)
-    details = client.get_node_details(node_id)
+    details = client.node_get_details(node_id)
     print("Node details:", details)
 
     # 3. List all active nodes
-    nodes = client.list_nodes()
+    nodes = client.node_list()
     print("My nodes:", nodes)
 
     # 4. Reboot a node
-    client.reboot_node(node_id)
+    client.node_reboot(node_id)
 
     # 5. Shutdown a node
-    client.shutdown_node(node_id)
+    client.node_shutdown(node_id)
 
     # 6. Delete a node and reclaim resources (polls until fully deleted)
-    client.delete_node(node_id)
+    client.node_delete(node_id)
 ```
 
 ---

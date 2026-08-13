@@ -236,48 +236,43 @@ class NodePickClient:
 
 
 
-    # --- Developer SSH Keys Endpoints ---
+    # --- Developer Keys Endpoints ---
 
-    def ssh_list(self) -> List[Dict[str, Any]]:
-        """List developer API & SSH keys (`GET /api/v1/developer/keys`)."""
+    def key_list(self, key_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List developer keys (`GET /api/v1/developer/keys`). Optionally filter by `key_type` (e.g. 'ssh_key' or 'api_key')."""
         response = self._client.get("/api/v1/developer/keys")
         response.raise_for_status()
-        return response.json().get("keys", [])
+        keys = response.json().get("keys", [])
+        if key_type:
+            return [k for k in keys if k.get("key_type") == key_type]
+        return keys
 
-    def key_create_api(self, name: str, permissions: Optional[List[str]] = None) -> Dict[str, Any]:
-        """Create an API key (`POST /api/v1/developer/keys`)."""
-        payload: Dict[str, Any] = {"name": name, "key_type": "api_key"}
+    def key_create(
+        self,
+        name: str,
+        key_type: str = "api_key",
+        ssh_public_key: Optional[str] = None,
+        permissions: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Create a developer key (`POST /api/v1/developer/keys`)."""
+        payload: Dict[str, Any] = {
+            "name": name,
+            "key_type": key_type,
+        }
+        if ssh_public_key:
+            payload["ssh_public_key"] = ssh_public_key
         if permissions:
             payload["permissions"] = permissions
         response = self._client.post("/api/v1/developer/keys", json=payload)
         response.raise_for_status()
         return response.json()
 
-    def ssh_add(self, name: str, ssh_public_key: str) -> Dict[str, Any]:
-        """Add an SSH key (`POST /api/v1/developer/keys`)."""
-        payload = {
-            "name": name,
-            "key_type": "ssh_key",
-            "ssh_public_key": ssh_public_key,
-        }
-        response = self._client.post("/api/v1/developer/keys", json=payload)
-        response.raise_for_status()
-        return response.json()
-
-    def ssh_delete(self, key_id: str) -> Dict[str, Any]:
-        """Delete an SSH key (`DELETE /api/v1/developer/keys/[id]`)."""
+    def key_delete(self, key_id: str) -> Dict[str, Any]:
+        """Delete a developer key (`DELETE /api/v1/developer/keys/[id]`)."""
         response = self._client.delete(f"/api/v1/developer/keys/{key_id}")
         response.raise_for_status()
         return response.json()
 
-    # Backwards compatibility aliases
-    list_nodes = node_list
-    create_node = node_create
-    wait_for_nodes = node_wait
-    get_node_details = node_get_details
-    delete_node = node_delete
-    shutdown_node = node_shutdown
-    reboot_node = node_reboot
-    boot_node = node_boot
+
 
 
