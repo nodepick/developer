@@ -73,12 +73,15 @@ def key_list(key_type: Optional[str] = None) -> List[Dict[str, Any]]:
 
 def key_create(
     name: str,
-    key_type: str = "api_key",
-    ssh_public_key: Optional[str] = None,
+    public_key: str,
+    key_type: str = "ssh_key",
     permissions: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     return _get_default_client().key_create(
-        name=name, key_type=key_type, ssh_public_key=ssh_public_key, permissions=permissions
+        name=name,
+        public_key=public_key,
+        key_type=key_type,
+        permissions=permissions,
     )
 
 def key_delete(key_id: str) -> Dict[str, Any]:

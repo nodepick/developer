@@ -250,17 +250,16 @@ class NodePickClient:
     def key_create(
         self,
         name: str,
-        key_type: str = "api_key",
-        ssh_public_key: Optional[str] = None,
+        public_key: str,
+        key_type: str = "ssh_key",
         permissions: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """Create a developer key (`POST /api/v1/developer/keys`)."""
+        """Create a developer SSH key (`POST /api/v1/developer/keys`)."""
         payload: Dict[str, Any] = {
             "name": name,
             "key_type": key_type,
+            "public_key": public_key,
         }
-        if ssh_public_key:
-            payload["ssh_public_key"] = ssh_public_key
         if permissions:
             payload["permissions"] = permissions
         response = self._client.post("/api/v1/developer/keys", json=payload)

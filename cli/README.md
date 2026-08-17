@@ -57,7 +57,7 @@ pip install -e ../sdk/python .
 np --version
 ```
 
-### Test authentication
+### Authentication
 
 ```bash
 # Save API key (and optional base URL) securely in OS keyring
@@ -68,6 +68,44 @@ np auth test
 
 # Clear stored API key from OS keyring
 np auth clear
+```
+
+### SSH Key Management
+
+```bash
+# Register an SSH public key from a file
+np ssh add -n "MBA 2026" --file ~/.ssh/id_ed25519.pub
+
+# Register an SSH public key directly
+np ssh add -n "Desktop" --key "ssh-ed25519 AAAAC3... user@host"
+
+# List registered SSH keys
+np ssh list
+
+# Delete an SSH key by ID
+np ssh delete <key_id>
+```
+
+### Compute Nodes
+
+```bash
+# List all compute nodes
+np node list
+
+# Create a new compute node
+np node create --name "my-sandbox" --cpu 2 --memory 2048
+
+# Get details & connection info for a node
+np node get <node_id>
+
+# Reboot a node
+np node reboot <node_id>
+
+# Shutdown a node
+np node shutdown <node_id>
+
+# Delete a node
+np node delete <node_id>
 ```
 
 ---

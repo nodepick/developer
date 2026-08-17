@@ -63,7 +63,7 @@ def add_ssh_key(
         if not ssh_str:
             raise ValueError("Must provide either --file or --key")
 
-        res = client.key_create(name=name, key_type="ssh_key", ssh_public_key=ssh_str)
+        res = client.key_create(name=name, key_type="ssh_key", public_key=ssh_str)
         key_id = res.get("key", {}).get("id", "N/A")
         console.print(f"[bold green]SSH Key registered successfully![/bold green] Key ID: {key_id}")
     except Exception as e:

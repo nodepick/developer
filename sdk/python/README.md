@@ -71,6 +71,14 @@ with client:
 
     # 6. Delete a node and reclaim resources (polls until fully deleted)
     client.node_delete(node_id)
+
+    # 7. Manage SSH Public Keys
+    client.key_create(
+        name="MBA 2026",
+        public_key="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOmcQ8tO47w2fJ4o8/0Fk8Y1Qd5d2S1mJmN5g/6h3o0D user@macbook"
+    )
+    keys = client.key_list(key_type="ssh_key")
+    print("Registered SSH keys:", keys)
 ```
 
 ---
