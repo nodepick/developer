@@ -2,6 +2,7 @@ import typer
 from rich.console import Console
 from .commands.node import app as node_app
 from .commands.ssh import app as ssh_app
+from .commands.ai import app as ai_app
 from .auth.login import app as auth_app
 from . import __version__
 
@@ -53,6 +54,7 @@ def main_callback(
 app.add_typer(auth_app, name="auth")
 app.add_typer(node_app, name="node")
 app.add_typer(ssh_app, name="ssh")
+app.add_typer(ai_app, name="ai")
 
 if __name__ == "__main__":
     app()

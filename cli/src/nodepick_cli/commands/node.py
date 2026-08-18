@@ -25,7 +25,7 @@ def get_client() -> nodepick.NodePickClient:
     if not key:
         console.print(
             "[yellow]No API key found.[/yellow] "
-            "Run [bold]np auth save[/bold] to store your API key."
+            "Run [bold]np auth configure[/bold] to store your API key."
         )
         raise typer.Exit(1)
     return nodepick.NodePickClient(api_key=key, base_url=url)

@@ -55,8 +55,9 @@ def auth_clear():
         handle_error(e, "Failed to clear credentials")
 
 
+@app.command("configure")
 @app.command("save")
-def auth_save(
+def auth_configure(
     api_key: Optional[str] = typer.Option(
         None, "--api-key", "-k", help="Nodepick API key / bearer token"
     ),
@@ -64,7 +65,7 @@ def auth_save(
         None, "--base-url", "-u", help="API base URL (default: https://api.nodepick.ai)"
     ),
 ):
-    """Save API key (and optional base URL) securely in the OS keyring."""
+    """Configure API key (and optional base URL) securely in the OS keyring."""
     try:
         if not api_key:
             api_key = typer.prompt("Nodepick API Key", hide_input=True)
@@ -76,11 +77,11 @@ def auth_save(
         save_config({"base_url": resolved_url})
 
         console.print(
-            "[bold green]Credentials saved.[/bold green] "
+            "[bold green]Credentials configured.[/bold green] "
             f"API key stored in OS keyring. Base URL: {resolved_url} (saved to config)"
         )
     except Exception as e:
-        handle_error(e, "Failed to save credentials")
+        handle_error(e, "Failed to configure credentials")
 
 
 @app.command("test")
@@ -91,7 +92,7 @@ def auth_test():
     if not key:
         console.print(
             "[yellow]No API key found.[/yellow] "
-            "Run 'np auth save' or set NODEPICK_API_KEY."
+            "Run 'np auth configure' or set NODEPICK_API_KEY."
         )
         raise typer.Exit(1)
 

@@ -25,7 +25,7 @@ def get_client() -> nodepick.NodePickClient:
     if not key:
         console.print(
             "[yellow]No API key found.[/yellow] "
-            "Run [bold]np auth save[/bold] to store your API key."
+            "Run [bold]np auth configure[/bold] to store your API key."
         )
         raise typer.Exit(1)
     return nodepick.NodePickClient(api_key=key, base_url=url)
@@ -36,12 +36,12 @@ def _render_ssh_keys_table(keys):
         console.print("[yellow]No SSH keys found.[/yellow]")
         return
 
-    table = Table("ID", "Name", "Type", "Created At")
+    table = Table("ID", "Name", "Fingerprint", "Created At")
     for key in keys:
         table.add_row(
             str(key.get("id", "N/A")),
             str(key.get("name", "N/A")),
-            str(key.get("key_type", "N/A")),
+            str(key.get("fingerprint", "N/A")),
             str(key.get("created_at", "N/A")),
         )
     console.print(table)
@@ -63,7 +63,7 @@ def add_ssh_key(
         if not ssh_str:
             raise ValueError("Must provide either --file or --key")
 
-        res = client.key_create(name=name, key_type="ssh_key", public_key=ssh_str)
+        res = client.key_create(name=name, public_key=ssh_str)
         key_id = res.get("key", {}).get("id", "N/A")
         console.print(f"[bold green]SSH Key registered successfully![/bold green] Key ID: {key_id}")
     except Exception as e:
@@ -92,11 +92,11 @@ def list_ssh_keys(
         case_sensitive=False,
     ),
 ):
-    """List all organization SSH keys."""
+    """List all SSH keys for the current user."""
     set_output_format(format)
     client = get_client()
     try:
-        keys = client.key_list(key_type="ssh_key")
+        keys = client.key_list()
         print_output(keys, table_render_func=_render_ssh_keys_table)
     except Exception as e:
         handle_error(e, "Error listing SSH keys")

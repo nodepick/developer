@@ -59,7 +59,7 @@ def get_api_key(override: Optional[str] = None) -> Optional[str]:
     env_key = os.getenv("NODEPICK_API_KEY")
     if env_key:
         return env_key
-    # 2. OS keyring (set via 'np auth save')
+    # 2. OS keyring (set via 'np auth configure')
     return _keyring_get(KEYRING_API_KEY)
 
 

@@ -60,8 +60,8 @@ np --version
 ### Authentication
 
 ```bash
-# Save API key (and optional base URL) securely in OS keyring
-np auth save
+# Configure API key (and optional base URL) securely in OS keyring
+np auth configure
 
 # Test API authentication status & organization details
 np auth test
@@ -106,6 +106,19 @@ np node shutdown <node_id>
 
 # Delete a node
 np node delete <node_id>
+```
+
+### AI & Model Context Protocol (MCP)
+
+```bash
+# Configure Antigravity to connect to a specific node MCP server over HTTP Stream
+np ai mcp configure antigravity dev
+
+# Configure Antigravity to connect to multiple nodes
+np ai mcp configure antigravity dev prod
+
+# Configure Antigravity for all available compute nodes
+np ai mcp configure antigravity
 ```
 
 ---

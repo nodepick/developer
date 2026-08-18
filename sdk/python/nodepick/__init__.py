@@ -68,20 +68,16 @@ def node_reboot(node_id: str) -> Dict[str, Any]:
 def node_boot(node_id: str) -> Dict[str, Any]:
     return _get_default_client().node_boot(node_id)
 
-def key_list(key_type: Optional[str] = None) -> List[Dict[str, Any]]:
-    return _get_default_client().key_list(key_type=key_type)
+def key_list() -> List[Dict[str, Any]]:
+    return _get_default_client().key_list()
 
 def key_create(
     name: str,
     public_key: str,
-    key_type: str = "ssh_key",
-    permissions: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     return _get_default_client().key_create(
         name=name,
         public_key=public_key,
-        key_type=key_type,
-        permissions=permissions,
     )
 
 def key_delete(key_id: str) -> Dict[str, Any]:

@@ -65,7 +65,7 @@ def handle_error(e: Exception, message: str = "An error occurred"):
         elif status == 400:
             console.print("[bold red]Invalid request[/bold red]")
         elif status in (401, 403):
-            console.print("[bold red]Authentication failed.[/bold red] Check your API key or run 'np auth login'.")
+            console.print("[bold red]Authentication failed.[/bold red] Check your API key or run 'np auth configure'.")
         else:
             console.print(f"[bold red]{message}:[/bold red] {e}")
     else:

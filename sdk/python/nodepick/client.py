@@ -236,38 +236,30 @@ class NodePickClient:
 
 
 
-    # --- Developer Keys Endpoints ---
+    # --- Developer SSH Keys Endpoints ---
 
-    def key_list(self, key_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        """List developer keys (`GET /api/v1/developer/keys`). Optionally filter by `key_type` (e.g. 'ssh_key' or 'api_key')."""
+    def key_list(self) -> List[Dict[str, Any]]:
+        """List SSH public keys (`GET /api/v1/developer/keys`)."""
         response = self._client.get("/api/v1/developer/keys")
         response.raise_for_status()
-        keys = response.json().get("keys", [])
-        if key_type:
-            return [k for k in keys if k.get("key_type") == key_type]
-        return keys
+        return response.json().get("keys", [])
 
     def key_create(
         self,
         name: str,
         public_key: str,
-        key_type: str = "ssh_key",
-        permissions: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
-        """Create a developer SSH key (`POST /api/v1/developer/keys`)."""
+        """Register an SSH public key (`POST /api/v1/developer/keys`)."""
         payload: Dict[str, Any] = {
             "name": name,
-            "key_type": key_type,
             "public_key": public_key,
         }
-        if permissions:
-            payload["permissions"] = permissions
         response = self._client.post("/api/v1/developer/keys", json=payload)
         response.raise_for_status()
         return response.json()
 
     def key_delete(self, key_id: str) -> Dict[str, Any]:
-        """Delete a developer key (`DELETE /api/v1/developer/keys/[id]`)."""
+        """Delete an SSH key (`DELETE /api/v1/developer/keys/[id]`)."""
         response = self._client.delete(f"/api/v1/developer/keys/{key_id}")
         response.raise_for_status()
         return response.json()
