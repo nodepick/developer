@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nodepick-cli"
-version = "0.1.0"
-description = "CLI tool for nodepick.ai Node orchestration"
+version = "0.1.1"
+description = "Official Python CLI for nodepick.ai orchestration"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

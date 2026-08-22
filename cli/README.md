@@ -108,7 +108,7 @@ np node shutdown <node_id>
 np node delete <node_id>
 ```
 
-### AI & Model Context Protocol (MCP)
+### [BETA] AI & Model Context Protocol (MCP)
 
 ```bash
 # Configure Antigravity to connect to a specific node MCP server over HTTP Stream
@@ -120,22 +120,3 @@ np ai mcp configure antigravity dev prod
 # Configure Antigravity for all available compute nodes
 np ai mcp configure antigravity
 ```
-
----
-
-## Publishing to PyPI
-
-To build and publish the CLI package to PyPI using [`uv`](https://github.com/astral-sh/uv):
-
-1. **Build the package**:
-   ```bash
-   uv build
-   ```
-   This generates distribution archives (`.tar.gz` and `.whl`) in the `dist/` directory.
-
-2. **Publish to PyPI**:
-   ```bash
-   uv publish
-   ```
-   *Note: You can pass `--token <your-pypi-token>` or set `UV_PUBLISH_TOKEN` in your environment.*
-

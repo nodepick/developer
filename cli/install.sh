@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
-VERSION="0.0.1"
+VERSION="0.1.1"
 PACKAGE_NAME="nodepick-cli"
 SDK_PACKAGE_NAME="nodepick"
 GIT_URL="git+https://github.com/nodepick/developer#subdirectory=cli"
@@ -111,15 +111,26 @@ log_success() {
     fi
 }
 
+log_warn() {
+    if [[ "$QUIET" == "false" ]]; then
+        echo -e "\033[33m!\033[0m $1" >&2
+    fi
+}
+
+log_error() {
+    echo -e "\033[31m✖\033[0m $1" >&2
+}
+
 run_cmd() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log "[dry-run] Would execute: $*"
+        return 0
+    fi
+
+    if [[ "$QUIET" == "true" ]]; then
+        "$@" >/dev/null 2>&1
     else
-        if [[ "$QUIET" == "true" ]]; then
-            "$@" >/dev/null 2>&1
-        else
-            "$@"
-        fi
+        "$@"
     fi
 }
 
@@ -128,11 +139,19 @@ install_uv() {
     if command -v uv >/dev/null 2>&1; then
         log "Found uv: $(command -v uv)"
         log_step "Installing ${PACKAGE_NAME} via 'uv tool'..."
-        run_cmd uv tool install "${PACKAGE_NAME}" --with "${SDK_PACKAGE_NAME}"
-        log_success "Successfully installed ${PACKAGE_NAME} using uv tool."
+        if run_cmd uv tool install "${PACKAGE_NAME}" --with "${SDK_PACKAGE_NAME}"; then
+            log_success "Successfully installed ${PACKAGE_NAME} using uv tool."
+            return 0
+        else
+            log_error "Failed to install ${PACKAGE_NAME} using uv tool."
+            if [[ "$MODE" == "uv" ]]; then
+                exit 1
+            fi
+            return 1
+        fi
     else
         if [[ "$MODE" == "uv" ]]; then
-            echo "Error: 'uv' binary not found in PATH." >&2
+            log_error "'uv' binary not found in PATH."
             echo "Please install uv (https://github.com/astral-sh/uv) or run with '--mode auto'." >&2
             exit 1
         fi
@@ -145,11 +164,19 @@ install_pipx() {
     if command -v pipx >/dev/null 2>&1; then
         log "Found pipx: $(command -v pipx)"
         log_step "Installing ${PACKAGE_NAME} via 'pipx'..."
-        run_cmd pipx install "${PACKAGE_NAME}"
-        log_success "Successfully installed ${PACKAGE_NAME} using pipx."
+        if run_cmd pipx install "${PACKAGE_NAME}"; then
+            log_success "Successfully installed ${PACKAGE_NAME} using pipx."
+            return 0
+        else
+            log_error "Failed to install ${PACKAGE_NAME} using pipx."
+            if [[ "$MODE" == "pipx" ]]; then
+                exit 1
+            fi
+            return 1
+        fi
     else
         if [[ "$MODE" == "pipx" ]]; then
-            echo "Error: 'pipx' binary not found in PATH." >&2
+            log_error "'pipx' binary not found in PATH."
             echo "Please install pipx or run with '--mode auto'." >&2
             exit 1
         fi
@@ -166,36 +193,60 @@ install_pip() {
         python_bin="python"
     else
         if [[ "$MODE" == "pip" ]]; then
-            echo "Error: Neither python3 nor python found in PATH." >&2
+            log_error "Neither python3 nor python found in PATH."
             exit 1
         fi
         return 1
     fi
 
     log "Using Python: $($python_bin --version 2>&1)"
+
+    if ! "$python_bin" -m pip --version >/dev/null 2>&1; then
+        if [[ "$MODE" == "pip" ]]; then
+            log_error "No module named pip found for $python_bin."
+            echo "Please install pip (e.g. 'sudo apt install python3-pip' or 'python3 -m ensurepip') or install uv." >&2
+            exit 1
+        fi
+        return 1
+    fi
+
     log_step "Installing ${PACKAGE_NAME} via pip..."
-    run_cmd "$python_bin" -m pip install --upgrade "${PACKAGE_NAME}"
-    log_success "Successfully installed ${PACKAGE_NAME} using pip."
+    if run_cmd "$python_bin" -m pip install --upgrade "${PACKAGE_NAME}"; then
+        log_success "Successfully installed ${PACKAGE_NAME} using pip."
+        return 0
+    else
+        log_error "Failed to install ${PACKAGE_NAME} using pip."
+        if [[ "$MODE" == "pip" ]]; then
+            exit 1
+        fi
+        return 1
+    fi
 }
 
 install_git() {
     log_step "Checking for 'uv' and 'git'..."
     if ! command -v uv >/dev/null 2>&1; then
-        echo "Error: 'uv' binary not found in PATH." >&2
+        log_error "'uv' binary not found in PATH."
         echo "Please install uv (https://github.com/astral-sh/uv)." >&2
         exit 1
     fi
 
     if ! command -v git >/dev/null 2>&1; then
-        echo "Error: 'git' binary not found in PATH." >&2
+        log_error "'git' binary not found in PATH."
+        echo "Please install git." >&2
         exit 1
     fi
 
     log "Found uv: $(command -v uv)"
     log "Found git: $(command -v git)"
     log_step "Installing ${PACKAGE_NAME} from Git repository via uv tool (${GIT_URL})..."
-    run_cmd uv tool install "${GIT_URL}" --with "${GIT_URL_SDK}"
-    log_success "Successfully installed ${PACKAGE_NAME} from Git repository via uv tool."
+    if run_cmd uv tool install "${GIT_URL}" --with "${GIT_URL_SDK}"; then
+        log_success "Successfully installed ${PACKAGE_NAME} from Git repository via uv tool."
+        return 0
+    else
+        log_error "Failed to install ${PACKAGE_NAME} from Git repository."
+        exit 1
+    fi
 }
 
 # Main execution
@@ -226,7 +277,12 @@ case "$MODE" in
         elif install_pip; then
             :
         else
-            echo "Error: Could not install via uv, pipx, or pip." >&2
+            log_error "Could not install ${PACKAGE_NAME} via uv, pipx, or pip."
+            echo "" >&2
+            echo "No working package manager was found. Please do one of the following:" >&2
+            echo "  1. Install uv (recommended): curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+            echo "  2. Install pip (e.g. 'sudo apt install python3-pip')" >&2
+            echo "  3. Install pipx" >&2
             exit 1
         fi
         ;;
@@ -235,5 +291,11 @@ esac
 if [[ "$DRY_RUN" == "false" ]]; then
     log ""
     log_success "nodepick.ai CLI installation process completed!"
-    log "Run 'np --help' to verify the installation."
+    if ! command -v np >/dev/null 2>&1; then
+        log_warn "'np' command was not found in your current PATH."
+        log_warn "You may need to add '~/.local/bin' to your PATH:"
+        log_warn "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    else
+        log "Run 'np --help' to verify the installation."
+    fi
 fi
