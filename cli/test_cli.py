@@ -5,6 +5,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from typer.testing import CliRunner
 from nodepick_cli.main import app
+from nodepick_cli import __version__
 
 runner = CliRunner()
 
@@ -19,12 +20,12 @@ class TestCliCommands(unittest.TestCase):
     def test_version(self):
         result = runner.invoke(app, ["--version"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("nodepick CLI version 0.1.0", result.output)
+        self.assertIn(f"nodepick CLI version {__version__}", result.output)
 
     def test_version_short(self):
         result = runner.invoke(app, ["-v"])
         self.assertEqual(result.exit_code, 0)
-        self.assertIn("nodepick CLI version 0.1.0", result.output)
+        self.assertIn(f"nodepick CLI version {__version__}", result.output)
 
     def test_node_help(self):
         result = runner.invoke(app, ["node", "--help"])
@@ -67,10 +68,26 @@ class TestCliCommands(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Test API access", result.output)
 
-    def test_auth_configure_interactive(self):
-        result = runner.invoke(app, ["auth", "configure"], input="test_api_key_123\n")
-        self.assertEqual(result.exit_code, 0)
-        self.assertIn("Credentials configured", result.output)
+    def test_auth_test_success(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.get_me.return_value = {
+            "user": {"id": "user-123", "email": "anil@nodepick.ai"},
+            "org": {"id": "org-456", "name": "anilj's Org"}
+        }
+        with patch("nodepick_cli.auth.login._get_api_key_with_source", return_value=("test-key", "env var")), \
+             patch("nodepick.NodePickClient", return_value=mock_client):
+            result = runner.invoke(app, ["auth", "test"])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("API access OK", result.output)
+            self.assertIn("API URL: https://api.nodepick.ai", result.output)
+            self.assertIn("User: user-123", result.output)
+            self.assertIn("Organization: org-456", result.output)
+
+    def test_auth_configure_no_api_key_flag(self):
+        result = runner.invoke(app, ["auth", "configure", "--api-key", "secret123"])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("No such option", result.output)
 
     def test_ai_help(self):
         result = runner.invoke(app, ["--help"])

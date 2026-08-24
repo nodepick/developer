@@ -56,30 +56,30 @@ def auth_clear():
 
 
 @app.command("configure")
-@app.command("save")
 def auth_configure(
-    api_key: Optional[str] = typer.Option(
-        None, "--api-key", "-k", help="Nodepick API key / bearer token"
-    ),
     base_url: Optional[str] = typer.Option(
         None, "--base-url", "-u", help="API base URL (default: https://api.nodepick.ai)"
     ),
 ):
     """Configure API key (and optional base URL) securely in the OS keyring."""
     try:
-        if not api_key:
-            api_key = typer.prompt("Nodepick API Key", hide_input=True)
+        api_key = typer.prompt("API Key", default="", hide_input=True, show_default=False)
+        if not api_key or not api_key.strip():
+            console.print("[yellow]No API key entered. Aborting.[/yellow]")
+            raise typer.Exit(1)
 
         resolved_url = (base_url or get_base_url()).rstrip("/")
 
-        _keyring_set(KEYRING_API_KEY, api_key)
+        _keyring_set(KEYRING_API_KEY, api_key.strip())
         # Save base_url to config file; only the API key lives in the keyring.
         save_config({"base_url": resolved_url})
 
         console.print(
             "[bold green]Credentials configured.[/bold green] "
-            f"API key stored in OS keyring. Base URL: {resolved_url} (saved to config)"
+            f"API key stored in OS keyring. Base URL: {resolved_url}"
         )
+    except typer.Exit:
+        raise
     except Exception as e:
         handle_error(e, "Failed to configure credentials")
 
@@ -99,14 +99,28 @@ def auth_test():
     try:
         client = nodepick.NodePickClient(api_key=key, base_url=url)
         user_info = client.get_me()
-        user = user_info.get("user", {})
-        org  = user_info.get("org", {})
-        console.print(
-            f"[bold green]API access OK.[/bold green] "
-            f"User: [bold]{user.get('email', 'unknown')}[/bold] | "
-            f"Org: {org.get('name', 'N/A')} | "
-            f"URL: {url} | "
-            f"Key source: [dim]{source}[/dim]"
+        user = user_info.get("user", {}) if isinstance(user_info.get("user"), dict) else {}
+        org  = user_info.get("org", {}) if isinstance(user_info.get("org"), dict) else {}
+
+        user_id = (
+            user.get("id")
+            or user.get("userId")
+            or user_info.get("userId")
+            or user_info.get("user_id")
+            or user.get("email")
+            or "unknown"
         )
+        org_id = (
+            org.get("id")
+            or org.get("orgId")
+            or user_info.get("orgId")
+            or user_info.get("org_id")
+            or "unknown"
+        )
+
+        console.print("[bold green]API access OK[/bold green]")
+        console.print(f"API URL: {url}")
+        console.print(f"User: {user_id}")
+        console.print(f"Organization: {org_id}")
     except Exception as e:
         handle_error(e, "API access test failed")
