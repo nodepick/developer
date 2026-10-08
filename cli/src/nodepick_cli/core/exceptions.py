@@ -31,7 +31,8 @@ def handle_error(e: Exception, message: str = "An error occurred"):
             except Exception:
                 err_obj = {"code": f"http_{e.response.status_code}", "message": str(e)}
         else:
-            err_obj = {"code": "error", "message": str(e)}
+            err_code = "not_found" if "not found" in str(e).lower() else "error"
+            err_obj = {"code": err_code, "message": str(e)}
         console.print_json(data=err_obj)
         raise typer.Exit(code=1)
 
@@ -69,5 +70,8 @@ def handle_error(e: Exception, message: str = "An error occurred"):
         else:
             console.print(f"[bold red]{message}:[/bold red] {e}")
     else:
-        console.print(f"[bold red]{message}:[/bold red] {e}")
+        if "node not found" in str(e).lower():
+            console.print("[bold red]Node not found[/bold red]")
+        else:
+            console.print(f"[bold red]{message}:[/bold red] {e}")
     raise typer.Exit(code=1)

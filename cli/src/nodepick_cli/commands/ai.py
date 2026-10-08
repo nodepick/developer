@@ -58,6 +58,57 @@ def configure_antigravity_mcp(servers: Dict[str, Any]) -> List[Path]:
     return updated_files
 
 
+def _delete_json_mcp_servers(file_path: Path, server_names: Optional[List[str]] = None) -> List[str]:
+    """Safely remove MCP servers from a JSON configuration file."""
+    if not file_path.exists():
+        return []
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            if not content:
+                return []
+            data = json.loads(content)
+    except Exception:
+        return []
+
+    if not isinstance(data, dict) or "mcpServers" not in data or not isinstance(data["mcpServers"], dict):
+        return []
+
+    removed = []
+    if server_names:
+        for name in server_names:
+            if name in data["mcpServers"]:
+                del data["mcpServers"][name]
+                removed.append(name)
+    else:
+        removed = list(data["mcpServers"].keys())
+        data["mcpServers"] = {}
+
+    if removed:
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+    return removed
+
+
+def delete_antigravity_mcp(server_names: Optional[List[str]] = None) -> List[str]:
+    """Remove MCP servers for Google Antigravity across its standard configuration locations."""
+    home = Path.home()
+    target_files = [
+        home / ".gemini" / "config" / "mcp_config.json",
+        home / ".gemini" / "settings.json",
+        home / ".gemini" / "antigravity-cli" / "settings.json",
+    ]
+    all_removed = set()
+    for path in target_files:
+        try:
+            removed = _delete_json_mcp_servers(path, server_names)
+            all_removed.update(removed)
+        except Exception as e:
+            console.print(f"[dim yellow]Warning: Failed modifying {path}: {e}[/dim yellow]")
+    return list(all_removed)
+
+
 @mcp_app.command("configure")
 def mcp_configure(
     agent: str = typer.Argument(
@@ -67,8 +118,19 @@ def mcp_configure(
     nodes: Optional[List[str]] = typer.Argument(
         None, help="Node IDs or display names to configure MCP for (if omitted, configures all nodes)"
     ),
+    insecure: bool = typer.Option(
+        False,
+        "--insecure",
+        help="Disable HTTPS certificate verification for MCP server connections.",
+    ),
+    delete: bool = typer.Option(
+        False,
+        "--delete",
+        "-d",
+        help="Delete the MCP server configuration for the specified node(s) or agent.",
+    ),
 ):
-    """Configure MCP servers for an AI agent (e.g. antigravity) to connect to compute nodes."""
+    """Configure or delete MCP servers for an AI agent (e.g. antigravity) to connect to compute nodes."""
     agent_clean = agent.strip().lower()
     if agent_clean not in ("antigravity", "agy", "gemini"):
         console.print(
@@ -77,6 +139,42 @@ def mcp_configure(
             + "[/bold]"
         )
         raise typer.Exit(1)
+
+    if delete:
+        try:
+            names_to_delete = list(nodes) if nodes else None
+            if names_to_delete:
+                try:
+                    client = get_client()
+                    for n in list(names_to_delete):
+                        try:
+                            details = client.node_get_details(n)
+                            for key in ("display_name", "displayName", "name", "vm_uuid", "id"):
+                                val = details.get(key)
+                                if val and val not in names_to_delete:
+                                    names_to_delete.append(val)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            if agent_clean in ("antigravity", "agy", "gemini"):
+                removed = delete_antigravity_mcp(names_to_delete)
+                if removed:
+                    for r in sorted(removed):
+                        console.print(f"[bold green]✔[/bold green] Removed MCP server configuration '[bold]{r}[/bold]'")
+                    console.print(
+                        f"[bold green]Successfully removed {len(removed)} MCP server configuration(s) for {agent_clean}.[/bold green]"
+                    )
+                else:
+                    if nodes:
+                        console.print(f"[yellow]No matching MCP server configurations found to delete for: {', '.join(nodes)}[/yellow]")
+                    else:
+                        console.print(f"[yellow]No MCP server configurations found to delete for {agent_clean}.[/yellow]")
+            return
+        except Exception as e:
+            handle_error(e, "Error deleting MCP configuration")
+            return
 
     client = get_client()
 
@@ -131,15 +229,18 @@ def mcp_configure(
                 "type": "http",
                 "transport": "http",
                 "protocol": "streamable_http",
-                "insecure": True,
-                "insecureSkipVerify": True,
-                "rejectUnauthorized": False,
-                "verify": False,
-                "tls": {
+            }
+            if insecure:
+                server_config.update({
                     "insecure": True,
                     "insecureSkipVerify": True,
-                },
-            }
+                    "rejectUnauthorized": False,
+                    "verify": False,
+                    "tls": {
+                        "insecure": True,
+                        "insecureSkipVerify": True,
+                    },
+                })
             if mcp_api_key:
                 server_config["headers"] = {
                     "Authorization": f"Bearer {mcp_api_key}",

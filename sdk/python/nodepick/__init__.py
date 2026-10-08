@@ -1,6 +1,6 @@
 import sys
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 
 logger = logging.getLogger("nodepick")
 if not logger.handlers:
@@ -26,6 +26,61 @@ def _get_default_client() -> NodePickClient:
         _default_client = NodePickClient()
     return _default_client
 
+def find_compute(
+    min_memory_gb: Optional[float] = None,
+    min_cpu: Optional[int] = None,
+    min_cpu_: Optional[int] = None,
+    min_storage_gb: Optional[int] = None,
+    max_price: Optional[float] = None,
+    region: Optional[str] = None,
+    datacenter: Optional[str] = None,
+    status: str = "active",
+    gpu: Optional[bool] = None,
+    page: Optional[int] = None,
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    return _get_default_client().find_compute(
+        min_memory_gb=min_memory_gb,
+        min_cpu=min_cpu,
+        min_cpu_=min_cpu_,
+        min_storage_gb=min_storage_gb,
+        max_price=max_price,
+        region=region,
+        datacenter=datacenter,
+        status=status,
+        gpu=gpu,
+        page=page,
+        limit=limit,
+    )
+
+def vpc_list() -> List[Dict[str, Any]]:
+    return _get_default_client().vpc_list()
+
+def vpc_create(
+    name: str,
+    description: Optional[str] = None,
+    region: Optional[str] = None,
+    availability_zone: Optional[str] = None,
+    subnet: Optional[str] = None,
+    gateway: Optional[str] = None,
+    enable_outbound_nat: bool = True,
+) -> Dict[str, Any]:
+    return _get_default_client().vpc_create(
+        name=name,
+        description=description,
+        region=region,
+        availability_zone=availability_zone,
+        subnet=subnet,
+        gateway=gateway,
+        enable_outbound_nat=enable_outbound_nat,
+    )
+
+def vpc_get(vpc_id: str) -> Dict[str, Any]:
+    return _get_default_client().vpc_get(vpc_id)
+
+def vpc_delete(vpc_id: str) -> Dict[str, Any]:
+    return _get_default_client().vpc_delete(vpc_id)
+
 def node_list() -> List[Dict[str, Any]]:
     return _get_default_client().node_list()
 
@@ -36,6 +91,12 @@ def node_create(
     display_name: Optional[str] = None,
     storage_gb: Optional[int] = None,
     region: Optional[str] = None,
+    network_id: Optional[str] = None,
+    vpc: Optional[Union[str, Dict[str, Any]]] = None,
+    vpc_id: Optional[str] = None,
+    system_id: Optional[str] = None,
+    host_id: Optional[str] = None,
+    max_price: Optional[float] = None,
 ) -> Dict[str, Any]:
     return _get_default_client().node_create(
         memory=memory,
@@ -44,8 +105,13 @@ def node_create(
         display_name=display_name,
         storage_gb=storage_gb,
         region=region,
+        network_id=network_id,
+        vpc=vpc,
+        vpc_id=vpc_id,
+        system_id=system_id,
+        host_id=host_id,
+        max_price=max_price,
     )
-
 
 def node_wait(node_ids: List[str], delay: float = 1.0):
     return _get_default_client().node_wait(node_ids, delay=delay)
@@ -67,6 +133,12 @@ def node_reboot(node_id: str) -> Dict[str, Any]:
 
 def node_boot(node_id: str) -> Dict[str, Any]:
     return _get_default_client().node_boot(node_id)
+
+def node_attach_ip(node_id: str, ip: str = "auto") -> Dict[str, Any]:
+    return _get_default_client().node_attach_ip(node_id, ip=ip)
+
+def node_detach_ip(node_id: str, ip: Optional[str] = None) -> Dict[str, Any]:
+    return _get_default_client().node_detach_ip(node_id, ip=ip)
 
 def key_list() -> List[Dict[str, Any]]:
     return _get_default_client().key_list()
@@ -91,6 +163,11 @@ __all__ = [
     "AnthropicProvider",
     "OpenAIProvider",
     "OllamaProvider",
+    "find_compute",
+    "vpc_list",
+    "vpc_create",
+    "vpc_get",
+    "vpc_delete",
     "node_list",
     "node_create",
     "node_wait",
@@ -100,6 +177,8 @@ __all__ = [
     "node_shutdown",
     "node_reboot",
     "node_boot",
+    "node_attach_ip",
+    "node_detach_ip",
     "key_list",
     "key_create",
     "key_delete",
