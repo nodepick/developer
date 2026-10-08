@@ -25,7 +25,7 @@ np = "nodepick_cli.main:app"
 packages = ["src/nodepick_cli"]
 
 [tool.uv.sources]
-nodepick = { path = "../sdk/python" }
+nodepick = { path = "../sdk/python", editable = true }
 
 
 

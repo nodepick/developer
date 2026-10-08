@@ -318,6 +318,243 @@ class TestCliCommands(unittest.TestCase):
                     self.assertEqual(cfg["mcpServers"], {})
 
 
+    def test_network_help(self):
+        result = runner.invoke(app, ["network", "--help"])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("list", result.output)
+        self.assertIn("create", result.output)
+        self.assertIn("get", result.output)
+        self.assertIn("delete", result.output)
+
+    def test_network_list(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.vpc_list.return_value = [
+            {"id": "vpc-1", "name": "prod-net", "subnet": "10.0.1.0/24", "region": "fmt1", "enableOutboundNat": True}
+        ]
+        with patch("nodepick_cli.commands.network.get_client", return_value=mock_client):
+            result = runner.invoke(app, ["network", "list"])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("vpc-1", result.output)
+            self.assertIn("prod-net", result.output)
+            self.assertIn("10.0.1.0/24", result.output)
+            # Verify AZ column is not present
+            self.assertNotIn(" AZ ", result.output)
+
+    def test_network_create(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.vpc_create.return_value = {"id": "vpc-new-123", "name": "devnet"}
+        with patch("nodepick_cli.commands.network.get_client", return_value=mock_client):
+            result = runner.invoke(app, ["network", "create", "devnet", "--region", "fmt1"])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("VPC network created successfully", result.output)
+            self.assertIn("vpc-new-123", result.output)
+            mock_client.vpc_create.assert_called_once_with(
+                name="devnet",
+                region="fmt1",
+                description=None,
+                enable_outbound_nat=True,
+            )
+
+            # Verify --az option is no longer supported
+            result_az = runner.invoke(app, ["network", "create", "devnet", "--region", "fmt1", "--az", "zone1"])
+            self.assertNotEqual(result_az.exit_code, 0)
+            self.assertIn("No such option: --az", result_az.output)
+
+    def test_network_get(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.vpc_get.return_value = {
+            "id": "vpc-123",
+            "name": "devnet",
+            "subnet": "10.0.1.0/24",
+            "vni": 1001,
+            "region": "fmt1"
+        }
+        with patch("nodepick_cli.commands.network.get_client", return_value=mock_client):
+            result = runner.invoke(app, ["network", "get", "vpc-123"])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("vpc-123", result.output)
+            self.assertIn("devnet", result.output)
+
+    def test_network_delete(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.vpc_delete.return_value = {"deleted": True}
+        with patch("nodepick_cli.commands.network.get_client", return_value=mock_client):
+            result = runner.invoke(app, ["network", "delete", "vpc-123"])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("VPC network vpc-123 deleted", result.output)
+
+    def test_node_find_command(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.find_compute.return_value = [
+            {
+                "id": "host-1",
+                "region": "fmt1",
+                "datacenter": "facility-1",
+                "memory_gb": 32,
+                "storage_gb": 500,
+                "cpu": {"cores": 16},
+                "requested_cpu": 2,
+                "requested_memory_gb": 4,
+                "requested_storage_gb": 50,
+                "pricing": {
+                    "hourly": "0.0150",
+                    "monthly": "10.95",
+                    "currency": "USD"
+                }
+            }
+        ]
+        with patch("nodepick_cli.commands.node.get_client", return_value=mock_client):
+            # Test 'np node find'
+            result = runner.invoke(app, ["node", "find", "-c", "2", "-m", "4", "-s", "50", "-p", "50"], env={"COLUMNS": "160"})
+            self.assertEqual(result.exit_code, 0)
+            # Verify required columns are present in output:
+            # host id, region, datacenter, ram, disk, cpu, price-per-hour, price-per-month
+            self.assertIn("Host ID", result.output)
+            self.assertIn("Region", result.output)
+            self.assertIn("Datacenter", result.output)
+            self.assertIn("RAM (GB)", result.output)
+            self.assertIn("Disk (GB)", result.output)
+            self.assertIn("CPU (Cores)", result.output)
+            self.assertIn("Price/hr ($)", result.output)
+            self.assertIn("Price/mo ($)", result.output)
+            self.assertIn("host-1", result.output)
+            self.assertIn("fmt1", result.output)
+            self.assertIn("facility-1", result.output)
+            self.assertIn("$0.0150", result.output)
+            self.assertIn("$10.95", result.output)
+
+            # Verify requested values (4, 50, 2) are displayed, NOT host capacity (32, 500, 16)
+            self.assertIn("4", result.output)
+            self.assertIn("50", result.output)
+            self.assertIn("2", result.output)
+
+            # Test shortcut 'np find'
+            res_shortcut = runner.invoke(app, ["find", "-c", "2", "-m", "4", "-s", "50"], env={"COLUMNS": "160"})
+            self.assertEqual(res_shortcut.exit_code, 0)
+            self.assertIn("Host ID", res_shortcut.output)
+            self.assertIn("$0.0150", res_shortcut.output)
+
+    def test_node_create_with_vpc_and_no_network_flag(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.node_create.return_value = {"vm_uuid": "node-new-123"}
+        with patch("nodepick_cli.commands.node.get_client", return_value=mock_client):
+            # 1. Create with --vpc (verifies default memory is 1 GB / value of 1)
+            result = runner.invoke(app, ["node", "create", "--name", "my-node", "--vpc", "devnet"])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("Node created successfully", result.output)
+            mock_client.node_create.assert_called_once_with(
+                memory=1,
+                cpu=1,
+                display_name="my-node",
+                storage_gb=None,
+                vpc="devnet",
+            )
+
+            # 2. Create with custom --memory 2
+            mock_client.node_create.reset_mock()
+            result_mem = runner.invoke(app, ["node", "create", "--name", "my-node-2", "--memory", "2"])
+            self.assertEqual(result_mem.exit_code, 0)
+            mock_client.node_create.assert_called_once_with(
+                memory=2,
+                cpu=1,
+                display_name="my-node-2",
+                storage_gb=None,
+                vpc=None,
+            )
+
+            # 3. Verify --network option no longer exists
+            result_invalid = runner.invoke(app, ["node", "create", "--network", "public"])
+            self.assertNotEqual(result_invalid.exit_code, 0)
+            self.assertIn("No such option: --network", result_invalid.output)
+
+            # 4. Verify min constraints in CLI (cpu >= 1, memory >= 1 GB, storage >= 10 GB)
+            res_bad_cpu = runner.invoke(app, ["node", "create", "--cpu", "0"])
+            self.assertNotEqual(res_bad_cpu.exit_code, 0)
+
+            res_bad_mem = runner.invoke(app, ["node", "create", "--memory", "0"])
+            self.assertNotEqual(res_bad_mem.exit_code, 0)
+
+            res_bad_storage = runner.invoke(app, ["node", "create", "--storage", "5"])
+            self.assertNotEqual(res_bad_storage.exit_code, 0)
+
+    def test_node_attach_and_detach_ip_ipv4(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.node_attach_ip.return_value = {"status": "attached", "ip": "1.2.3.4/26", "ipVersion": 4}
+        mock_client.node_detach_ip.return_value = {"status": "detached"}
+        with patch("nodepick_cli.commands.node.get_client", return_value=mock_client):
+            # Standard: np node attach-ip dev
+            res1 = runner.invoke(app, ["node", "attach-ip", "dev"])
+            self.assertEqual(res1.exit_code, 0)
+            self.assertIn("Public IPv4 attached to node dev", res1.output)
+            self.assertIn("1.2.3.4/26", res1.output)
+            mock_client.node_attach_ip.assert_called_with("dev", ip="auto")
+
+            # Inverted: np node dev attach-ip
+            res2 = runner.invoke(app, ["node", "dev", "attach-ip"])
+            self.assertEqual(res2.exit_code, 0)
+            self.assertIn("Public IPv4 attached to node dev", res2.output)
+
+            # Specific IPv4: np node attach-ip dev --ip 1.2.3.4
+            res_spec = runner.invoke(app, ["node", "attach-ip", "dev", "--ip", "1.2.3.4"])
+            self.assertEqual(res_spec.exit_code, 0)
+            mock_client.node_attach_ip.assert_called_with("dev", ip="1.2.3.4")
+
+            # Detach: np node detach-ip dev and np node dev detach-ip
+            res3 = runner.invoke(app, ["node", "detach-ip", "dev"])
+            self.assertEqual(res3.exit_code, 0)
+            self.assertIn("Public IPv4 detached from node dev", res3.output)
+
+            res4 = runner.invoke(app, ["node", "dev", "detach-ip"])
+            self.assertEqual(res4.exit_code, 0)
+            self.assertIn("Public IPv4 detached from node dev", res4.output)
+
+    def test_node_attach_and_detach_ip_ipv6(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.node_attach_ip.return_value = {"status": "attached", "ip": "2001:470::1/64", "ipVersion": 6}
+        mock_client.node_detach_ip.return_value = {"status": "detached"}
+        mock_client.node_get_details.return_value = {
+            "connect": {"publicIpv6": "2001:470::1/64"}
+        }
+        with patch("nodepick_cli.commands.node.get_client", return_value=mock_client):
+            # Standard with --ip auto-ipv6: np node attach-ip dev --ip auto-ipv6
+            res1 = runner.invoke(app, ["node", "attach-ip", "dev", "--ip", "auto-ipv6"])
+            self.assertEqual(res1.exit_code, 0)
+            self.assertIn("Public IPv6 attached to node dev", res1.output)
+            mock_client.node_attach_ip.assert_called_with("dev", ip="auto-ipv6")
+
+            # Inverted with --ip ipv6: np node dev attach-ip --ip ipv6
+            res2 = runner.invoke(app, ["node", "dev", "attach-ip", "--ip", "ipv6"])
+            self.assertEqual(res2.exit_code, 0)
+            self.assertIn("Public IPv6 attached to node dev", res2.output)
+
+            # Auto-detected IPv6 address string: np node attach-ip dev --ip 2001:470::1
+            res_addr = runner.invoke(app, ["node", "attach-ip", "dev", "--ip", "2001:470::1"])
+            self.assertEqual(res_addr.exit_code, 0)
+            mock_client.node_attach_ip.assert_called_with("dev", ip="2001:470::1")
+
+            # Verify --ipv6 is no longer an option on attach-ip
+            res_no_opt = runner.invoke(app, ["node", "attach-ip", "dev", "--ipv6"])
+            self.assertNotEqual(res_no_opt.exit_code, 0)
+            self.assertIn("No such option: --ipv6", res_no_opt.output)
+
+            # Detach IPv6: np node detach-ip dev --ipv6 and np node dev detach-ip --ipv6
+            res3 = runner.invoke(app, ["node", "detach-ip", "dev", "--ipv6"])
+            self.assertEqual(res3.exit_code, 0)
+            self.assertIn("Public IPv6 detached from node dev", res3.output)
+
+            res4 = runner.invoke(app, ["node", "dev", "detach-ip", "--ipv6"])
+            self.assertEqual(res4.exit_code, 0)
+            self.assertIn("Public IPv6 detached from node dev", res4.output)
+
+
 if __name__ == "__main__":
     unittest.main()
 

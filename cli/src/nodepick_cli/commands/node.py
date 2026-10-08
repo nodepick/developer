@@ -1,5 +1,6 @@
 import typer
-from typing import Optional
+import typer.core
+from typing import Optional, List, Dict, Any
 from rich.console import Console
 from rich.table import Table, Column
 import nodepick
@@ -8,8 +9,19 @@ from ..core.exceptions import handle_error
 from ..core.formatters import OutputFormat, set_output_format, get_output_format, print_output
 
 
+class NodeTyperGroup(typer.core.TyperGroup):
+    """Custom TyperGroup allowing both 'np node <action> <node_id>' and 'np node <node_id> <action>'."""
+    def parse_args(self, ctx, args):
+        actions = {
+            "attach-ip", "detach-ip",
+            "boot", "reboot", "shutdown", "delete", "get"
+        }
+        if len(args) >= 2 and args[1] in actions and args[0] not in self.commands:
+            args = [args[1], args[0]] + list(args[2:])
+        return super().parse_args(ctx, args)
 
-app = typer.Typer(name="node", help="Manage Compute Nodes.")
+
+app = typer.Typer(cls=NodeTyperGroup, name="node", help="Manage Compute Nodes.")
 console = Console()
 
 from click.core import ParameterSource
@@ -70,6 +82,107 @@ def _render_nodes_table(nodes, client=None):
         )
     console.print(table)
 
+
+def _render_compute_hosts_table(hosts):
+    if not hosts:
+        console.print("[yellow]No compute hosts found matching criteria.[/yellow]")
+        return
+
+    table = Table(
+        "Host ID",
+        "Region",
+        "Datacenter",
+        "RAM (GB)",
+        "Disk (GB)",
+        "CPU (Cores)",
+        "Price/hr ($)",
+        "Price/mo ($)",
+    )
+    for host in hosts:
+        # Show requested specs (RAM, CPU, and Disk) for which pricing was evaluated,
+        # rather than the compute host's total reported capacity.
+        req_cpu = host.get("requested_cpu")
+        if req_cpu is None:
+            cpu_info = host.get("cpu", {})
+            req_cpu = cpu_info.get("cores") if isinstance(cpu_info, dict) else cpu_info
+
+        req_mem = host.get("requested_memory_gb")
+        if req_mem is None:
+            req_mem = host.get("memory_gb")
+        elif isinstance(req_mem, (int, float)) and req_mem == int(req_mem):
+            req_mem = int(req_mem)
+
+        req_disk = host.get("requested_storage_gb")
+        if req_disk is None:
+            req_disk = host.get("storage_gb")
+
+        pricing = host.get("pricing") if isinstance(host.get("pricing"), dict) else {}
+        hourly = pricing.get("hourly") or pricing.get("hour") or host.get("estimated_hourly_cost_usd")
+        monthly = pricing.get("monthly") or host.get("estimated_monthly_cost_usd")
+
+        if hourly is not None:
+            try:
+                hourly_str = f"${float(hourly):.4f}"
+            except (ValueError, TypeError):
+                hourly_str = f"${hourly}"
+        else:
+            hourly_str = "N/A"
+
+        if monthly is not None:
+            try:
+                monthly_str = f"${float(monthly):.2f}"
+            except (ValueError, TypeError):
+                monthly_str = f"${monthly}"
+        else:
+            monthly_str = "N/A"
+
+        table.add_row(
+            str(host.get("id") or "N/A"),
+            str(host.get("region") or "N/A"),
+            str(host.get("datacenter") or "N/A"),
+            str(req_mem if req_mem is not None else "N/A"),
+            str(req_disk if req_disk is not None else "N/A"),
+            str(req_cpu if req_cpu is not None else "N/A"),
+            hourly_str,
+            monthly_str,
+        )
+    console.print(table)
+
+
+@app.command("find")
+def node_find(
+    cpu: Optional[int] = typer.Option(None, "--cpu", "-c", help="Minimum CPU cores"),
+    memory_gb: Optional[float] = typer.Option(None, "--memory", "-m", help="Minimum RAM in GB"),
+    storage_gb: Optional[int] = typer.Option(None, "--storage", "-s", help="Minimum storage in GB"),
+    max_price: Optional[float] = typer.Option(None, "--max-price", "-p", help="Maximum monthly price in USD"),
+    region: Optional[str] = typer.Option(None, "--region", "-r", help="Filter by target region"),
+    datacenter: Optional[str] = typer.Option(None, "--datacenter", help="Filter by datacenter facility code"),
+    status: str = typer.Option("active", "--status", help="Filter by host status (active, reserved, all)"),
+    format: OutputFormat = typer.Option(
+        OutputFormat.TABLE,
+        "--format", "-f",
+        help="Output format (table or json).",
+        case_sensitive=False,
+    ),
+):
+    """Find and discover available compute hosts matching specific hardware and pricing criteria."""
+    set_output_format(format)
+    client = get_client()
+    try:
+        hosts = client.find_compute(
+            min_cpu=cpu,
+            min_memory_gb=memory_gb,
+            min_storage_gb=storage_gb,
+            max_price=max_price,
+            region=region,
+            datacenter=datacenter,
+            status=status,
+        )
+        print_output(hosts, table_render_func=_render_compute_hosts_table)
+    except Exception as e:
+        handle_error(e, "Error finding compute hosts")
+
+
 @app.command("boot")
 def node_boot(
     node_id: str = typer.Argument(..., help="Node ID or display name to boot"),
@@ -87,27 +200,99 @@ def node_boot(
 @app.command("create")
 def node_create(
     display_name: Optional[str] = typer.Option(None, "--name", "-n", help="Display name for the node"),
-    cpu: int = typer.Option(1, "--cpu", "-c", help="Number of vCPUs"),
-    memory_mb: int = typer.Option(512, "--memory", "-m", help="Memory size in MB"),
-    network_type: str = typer.Option("private", "--network", help="Network type (private/public)"),
-    storage_gb: Optional[int] = typer.Option(None, "--storage", help="Disk storage in GB (default: 10)"),
+    cpu: int = typer.Option(1, "--cpu", "-c", min=1, help="Number of vCPUs (min: 1)"),
+    memory: int = typer.Option(1, "--memory", "-m", min=1, help="Memory size in GB (min: 1, default: 1)"),
+    storage_gb: Optional[int] = typer.Option(None, "--storage", min=10, help="Disk storage in GB (min: 10, default: 10)"),
+    vpc: Optional[str] = typer.Option(None, "--vpc", help="VPC network ID or name to deploy node into"),
 ):
     """Deploy a new compute node."""
     client = get_client()
-    memory_bytes = memory_mb * 1024 * 1024
     try:
         console.print("[cyan]Creating node...[/cyan]")
         node = client.node_create(
-            memory=memory_bytes,
+            memory=memory,
             cpu=cpu,
-            network_type=network_type,
             display_name=display_name,
             storage_gb=storage_gb,
+            vpc=vpc,
         )
         node_id = node.get("vm_uuid")
         console.print(f"[bold green]Node created successfully![/bold green] ID: {node_id}")
     except Exception as e:
         handle_error(e, "Error creating node")
+
+
+@app.command("attach-ip")
+def node_attach_ip(
+    node_id: str = typer.Argument(..., help="Node ID or display name"),
+    ip: str = typer.Option(
+        "auto",
+        "--ip",
+        help="Public IP address to attach (IPv4 or IPv6), or 'auto' (IPv4) / 'auto-ipv6' (IPv6)",
+    ),
+):
+    """Attach a public IP address (IPv4 or IPv6) to a compute node."""
+    client = get_client()
+    target_ip = ip
+    if isinstance(target_ip, str):
+        cleaned = target_ip.strip().lower()
+        if cleaned in ("auto-ipv6", "ipv6", "v6", "6"):
+            target_ip = "auto-ipv6"
+        elif cleaned in ("auto-ipv4", "ipv4", "v4", "4"):
+            target_ip = "auto"
+
+    is_v6_target = target_ip == "auto-ipv6" or ":" in target_ip
+    ver_target = "IPv6" if is_v6_target else "IPv4"
+    try:
+        console.print(f"[cyan]Attaching public {ver_target} to node {node_id}...[/cyan]")
+        res = client.node_attach_ip(node_id, ip=target_ip)
+        assigned_ip = res.get("ip") or "assigned"
+        is_v6_res = res.get("ipVersion") == 6 or ":" in str(assigned_ip)
+        ver_res = "IPv6" if is_v6_res else "IPv4"
+        console.print(f"[bold green]Public {ver_res} attached to node {node_id}:[/bold green] [cyan]{assigned_ip}[/cyan]")
+    except Exception as e:
+        handle_error(e, f"Error attaching public {ver_target}")
+
+
+@app.command("detach-ip")
+def node_detach_ip(
+    node_id: str = typer.Argument(..., help="Node ID or display name"),
+    ip: Optional[str] = typer.Option(None, "--ip", help="Specific public IP address to detach (auto-detected if omitted)"),
+    ipv6: bool = typer.Option(False, "--ipv6", "-6", help="Detach public IPv6 address"),
+):
+    """Detach a public IP address (IPv4 or IPv6) from a compute node."""
+    client = get_client()
+    target_ip = ip
+    if not target_ip and ipv6:
+        try:
+            details = client.node_get_details(node_id)
+            connect = details.get("connect") or {}
+            candidate = connect.get("publicIpv6") or connect.get("ipv6")
+            if candidate:
+                target_ip = candidate
+        except Exception:
+            pass
+    elif not target_ip:
+        try:
+            details = client.node_get_details(node_id)
+            connect = details.get("connect") or {}
+            pub4 = connect.get("publicIp")
+            pub6 = connect.get("publicIpv6") or connect.get("ipv6")
+            if pub6 and not pub4:
+                target_ip = pub6
+            elif pub4:
+                target_ip = pub4
+        except Exception:
+            pass
+
+    is_v6 = (":" in target_ip) if target_ip else ipv6
+    ver_label = "IPv6" if is_v6 else "IPv4"
+    try:
+        console.print(f"[cyan]Detaching public {ver_label} from node {node_id}...[/cyan]")
+        res = client.node_detach_ip(node_id, ip=target_ip)
+        console.print(f"[bold green]Public {ver_label} detached from node {node_id}.[/bold green]")
+    except Exception as e:
+        handle_error(e, f"Error detaching public {ver_label}")
 
 
 @app.command("delete")

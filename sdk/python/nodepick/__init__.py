@@ -58,21 +58,17 @@ def vpc_list() -> List[Dict[str, Any]]:
 
 def vpc_create(
     name: str,
-    description: Optional[str] = None,
     region: Optional[str] = None,
-    availability_zone: Optional[str] = None,
-    subnet: Optional[str] = None,
-    gateway: Optional[str] = None,
+    description: Optional[str] = None,
     enable_outbound_nat: bool = True,
+    for_provision: Optional[bool] = None,
 ) -> Dict[str, Any]:
     return _get_default_client().vpc_create(
         name=name,
-        description=description,
         region=region,
-        availability_zone=availability_zone,
-        subnet=subnet,
-        gateway=gateway,
+        description=description,
         enable_outbound_nat=enable_outbound_nat,
+        for_provision=for_provision,
     )
 
 def vpc_get(vpc_id: str) -> Dict[str, Any]:
@@ -85,7 +81,7 @@ def node_list() -> List[Dict[str, Any]]:
     return _get_default_client().node_list()
 
 def node_create(
-    memory: Optional[int] = 512 * 1024 * 1024,
+    memory: Optional[int] = 1,
     cpu: Optional[int] = 1,
     network_type: str = "private",
     display_name: Optional[str] = None,
@@ -134,11 +130,14 @@ def node_reboot(node_id: str) -> Dict[str, Any]:
 def node_boot(node_id: str) -> Dict[str, Any]:
     return _get_default_client().node_boot(node_id)
 
-def node_attach_ip(node_id: str, ip: str = "auto") -> Dict[str, Any]:
-    return _get_default_client().node_attach_ip(node_id, ip=ip)
+def node_attach_ip(node_id: str, ip: str = "auto", version: Optional[int] = None) -> Dict[str, Any]:
+    return _get_default_client().node_attach_ip(node_id, ip=ip, version=version)
 
-def node_detach_ip(node_id: str, ip: Optional[str] = None) -> Dict[str, Any]:
-    return _get_default_client().node_detach_ip(node_id, ip=ip)
+def node_detach_ip(node_id: str, ip: Optional[str] = None, version: Optional[int] = None) -> Dict[str, Any]:
+    return _get_default_client().node_detach_ip(node_id, ip=ip, version=version)
+
+attach_ip = node_attach_ip
+detach_ip = node_detach_ip
 
 def key_list() -> List[Dict[str, Any]]:
     return _get_default_client().key_list()
@@ -179,6 +178,8 @@ __all__ = [
     "node_boot",
     "node_attach_ip",
     "node_detach_ip",
+    "attach_ip",
+    "detach_ip",
     "key_list",
     "key_create",
     "key_delete",

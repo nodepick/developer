@@ -8,22 +8,6 @@ logger = logging.getLogger("nodepick")
 
 HOURS_PER_MONTH = 730
 
-def _calculate_host_hourly_cost(
-    host: Dict[str, Any], cpu: float = 1, memory_gb: float = 0.5, storage_gb: float = 10
-) -> float:
-    """Calculate the estimated hourly cost in USD for a compute slice on a host."""
-    pricing = host.get("pricing") if isinstance(host.get("pricing"), dict) else {}
-    vcpu_micros = pricing.get("vcpu_micros_per_hour", 0)
-    ram_micros = pricing.get("ram_gib_micros_per_hour", 0)
-    storage_micros = pricing.get("storage_gib_micros_per_hour", 0)
-    total_micros = (cpu * vcpu_micros) + (memory_gb * ram_micros) + (storage_gb * storage_micros)
-    return total_micros / 1_000_000.0
-
-def _calculate_host_monthly_cost(
-    host: Dict[str, Any], cpu: float = 1, memory_gb: float = 0.5, storage_gb: float = 10
-) -> float:
-    """Calculate the estimated monthly cost in USD (~730 hours/month) for a compute slice on a host."""
-    return _calculate_host_hourly_cost(host, cpu, memory_gb, storage_gb) * HOURS_PER_MONTH
 
 def _log_request(request: httpx.Request):
     if not logger.isEnabledFor(logging.DEBUG):
@@ -51,6 +35,15 @@ async def _async_log_request(request: httpx.Request):
 
 async def _async_log_response(response: httpx.Response):
     _log_response(response)
+
+def _normalize_memory_gb(memory: Optional[Union[int, float]]) -> float:
+    if memory is None:
+        return 1.0
+    if memory > 1024 * 1024:
+        return memory / (1024 * 1024 * 1024)
+    if memory > 128:
+        return memory / 1024.0
+    return float(memory)
 
 class NodePickClient:
     def __init__(self, api_key: Optional[str] = None, base_url: str = "https://api.nodepick.ai"):
@@ -150,15 +143,18 @@ class NodePickClient:
     ) -> List[Dict[str, Any]]:
         """Search and find compute hosts matching specific hardware, region, and pricing filters (`GET /api/v1/compute`)."""
         params: Dict[str, Any] = {}
+        effective_cpu = min_cpu if min_cpu is not None else min_cpu_
+        req_cpu = max(int(effective_cpu if effective_cpu is not None else 1), 1)
+        req_mem = max(float(min_memory_gb if min_memory_gb is not None else 1.0), 1.0)
+        req_disk = max(int(min_storage_gb if min_storage_gb is not None else 10), 10)
+
+        params: Dict[str, Any] = {
+            "min_cpu": req_cpu,
+            "min_memory_gb": int(req_mem) if req_mem == int(req_mem) else req_mem,
+            "min_storage_gb": req_disk,
+        }
         if status:
             params["status"] = status
-        effective_cpu = min_cpu if min_cpu is not None else min_cpu_
-        if effective_cpu is not None:
-            params["min_cpu"] = effective_cpu
-        if min_memory_gb is not None:
-            params["min_memory_gb"] = min_memory_gb
-        if min_storage_gb is not None:
-            params["min_storage_gb"] = min_storage_gb
         if region:
             params["region"] = region
         if datacenter:
@@ -175,23 +171,46 @@ class NodePickClient:
         data = response.json()
         hosts = data.get("hosts", []) if isinstance(data, dict) else []
 
-        spec_cpu = float(effective_cpu or 1)
-        spec_mem = float(min_memory_gb or 0.5)
-        spec_disk = float(min_storage_gb or 10)
-
         for host in hosts:
             if isinstance(host, dict):
-                hourly = _calculate_host_hourly_cost(
-                    host, cpu=spec_cpu, memory_gb=spec_mem, storage_gb=spec_disk
-                )
-                host["estimated_hourly_cost_usd"] = hourly
-                host["estimated_monthly_cost_usd"] = round(hourly * HOURS_PER_MONTH, 4)
+                # Preserve host reported capacity
+                host["capacity_cpu_cores"] = host.get("cpu", {}).get("cores") if isinstance(host.get("cpu"), dict) else host.get("cpu")
+                host["capacity_memory_gb"] = host.get("memory_gb")
+                host["capacity_storage_gb"] = host.get("storage_gb")
+
+                # Store requested specs for which pricing was evaluated
+                host["requested_cpu"] = req_cpu
+                host["requested_memory_gb"] = req_mem
+                host["requested_storage_gb"] = req_disk
+
+                pricing = host.get("pricing") if isinstance(host.get("pricing"), dict) else {}
+                hourly_raw = pricing.get("hourly") or pricing.get("hour")
+                monthly_raw = pricing.get("monthly")
+
+                # Convenience float properties mapped directly from upstream pricing
+                if hourly_raw is not None:
+                    try:
+                        host["estimated_hourly_cost_usd"] = float(hourly_raw)
+                    except (ValueError, TypeError):
+                        pass
+                if monthly_raw is not None:
+                    try:
+                        host["estimated_monthly_cost_usd"] = float(monthly_raw)
+                    except (ValueError, TypeError):
+                        pass
 
         if max_price is not None:
-            hosts = [
-                h for h in hosts
-                if h.get("estimated_monthly_cost_usd", float("inf")) <= max_price
-            ]
+            def _get_monthly_cost(h: Dict[str, Any]) -> float:
+                pricing = h.get("pricing") if isinstance(h.get("pricing"), dict) else {}
+                monthly = pricing.get("monthly") or h.get("estimated_monthly_cost_usd")
+                if monthly is not None:
+                    try:
+                        return float(monthly)
+                    except (ValueError, TypeError):
+                        pass
+                return float("inf")
+
+            hosts = [h for h in hosts if _get_monthly_cost(h) <= max_price]
 
         return hosts
 
@@ -238,28 +257,22 @@ class NodePickClient:
     def vpc_create(
         self,
         name: str,
-        description: Optional[str] = None,
         region: Optional[str] = None,
-        availability_zone: Optional[str] = None,
-        subnet: Optional[str] = None,
-        gateway: Optional[str] = None,
+        description: Optional[str] = None,
         enable_outbound_nat: bool = True,
+        for_provision: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Create a new VPC network (`POST /api/v1/networking`)."""
         payload: Dict[str, Any] = {
             "name": name,
             "enableOutboundNat": enable_outbound_nat,
         }
-        if description is not None:
-            payload["description"] = description
         if region is not None:
             payload["region"] = region
-        if availability_zone is not None:
-            payload["availabilityZone"] = availability_zone
-        if subnet is not None:
-            payload["subnet"] = subnet
-        if gateway is not None:
-            payload["gateway"] = gateway
+        if description is not None:
+            payload["description"] = description
+        if for_provision is not None:
+            payload["forProvision"] = for_provision
 
         response = self._client.post("/api/v1/networking", json=payload)
         response.raise_for_status()
@@ -285,7 +298,7 @@ class NodePickClient:
 
     def node_create(
         self,
-        memory: Optional[int] = 512 * 1024 * 1024,
+        memory: Optional[int] = 1,
         cpu: Optional[int] = 1,
         network_type: str = "private",
         display_name: Optional[str] = None,
@@ -299,6 +312,17 @@ class NodePickClient:
         max_price: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Deploy a new compute node (`POST /api/v1/nodes`)."""
+        # Enforce minimum requirements: 1 GB RAM, 1 vCPU, 10 GB Disk
+        effective_mem_gb = _normalize_memory_gb(memory) if memory is not None else 1.0
+        if effective_mem_gb < 1.0:
+            raise ValueError(f"Memory must be at least 1 GB (got {memory})")
+
+        if cpu is not None and cpu < 1:
+            raise ValueError(f"CPU must be at least 1 vCPU (got {cpu})")
+
+        if storage_gb is not None and storage_gb < 10:
+            raise ValueError(f"Storage must be at least 10 GB (got {storage_gb})")
+
         payload: Dict[str, Any] = {
             "networkType": network_type,
         }
@@ -324,12 +348,9 @@ class NodePickClient:
             payload["systemId"] = str(target_host)
         else:
             try:
-                req_cpu = cpu or 1
-                if memory and memory > 1024 * 1024:
-                    req_mem_gb = memory / (1024 * 1024 * 1024)
-                else:
-                    req_mem_gb = float(memory or 0.5)
-                req_storage_gb = storage_gb or 10
+                req_cpu = max(cpu or 1, 1)
+                req_mem_gb = max(effective_mem_gb, 1.0)
+                req_storage_gb = max(storage_gb or 10, 10)
 
                 candidates = self.find_compute(
                     min_cpu=req_cpu,
@@ -342,7 +363,12 @@ class NodePickClient:
 
                 if candidates:
                     def _rank_key(c: Dict[str, Any]):
-                        price = c.get("estimated_monthly_cost_usd", float("inf"))
+                        pricing = c.get("pricing") if isinstance(c.get("pricing"), dict) else {}
+                        monthly_val = pricing.get("monthly") or c.get("estimated_monthly_cost_usd")
+                        try:
+                            price = float(monthly_val) if monthly_val is not None else float("inf")
+                        except (ValueError, TypeError):
+                            price = float("inf")
                         cores = c.get("cpu", {}).get("cores", 9999) if isinstance(c.get("cpu"), dict) else 9999
                         mem = c.get("memory_gb", 9999)
                         return (price, cores, mem)
@@ -442,21 +468,69 @@ class NodePickClient:
         response.raise_for_status()
         return response.json()
 
-    def node_attach_ip(self, node_id: str, ip: str = "auto") -> Dict[str, Any]:
+    def node_attach_ip(
+        self,
+        node_id: str,
+        ip: str = "auto",
+        version: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Attach a public IP address (IPv4 or IPv6) to a node (`POST /api/v1/nodes/[id]/network/ip`)."""
         target_id = self.resolve_node_id(node_id)
-        payload = {"ip": ip}
+        target_ip = ip
+        if version == 6:
+            if target_ip in ("auto", "auto-ipv4"):
+                target_ip = "auto-ipv6"
+        elif version == 4:
+            if target_ip == "auto-ipv6":
+                target_ip = "auto"
+        elif isinstance(target_ip, str):
+            cleaned = target_ip.strip().lower()
+            if cleaned in ("auto-ipv6", "ipv6", "v6", "6"):
+                target_ip = "auto-ipv6"
+            elif cleaned in ("auto-ipv4", "ipv4", "v4", "4"):
+                target_ip = "auto"
+
+        payload = {"ip": target_ip}
         response = self._client.post(f"/api/v1/nodes/{target_id}/network/ip", json=payload)
         response.raise_for_status()
         return response.json()
 
-    def node_detach_ip(self, node_id: str, ip: Optional[str] = None) -> Dict[str, Any]:
+    attach_ip = node_attach_ip
+
+    def node_detach_ip(
+        self,
+        node_id: str,
+        ip: Optional[str] = None,
+        version: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Detach a public IP address from a node (`DELETE /api/v1/nodes/[id]/network/ip`)."""
         target_id = self.resolve_node_id(node_id)
-        params = {"ip": ip} if ip else None
+        target_ip = ip
+        if target_ip is None and version == 6:
+            try:
+                details = self.node_get_details(target_id)
+                connect = details.get("connect") or {}
+                candidate = connect.get("publicIpv6") or connect.get("ipv6")
+                if candidate:
+                    target_ip = candidate
+            except Exception:
+                pass
+        elif isinstance(target_ip, str) and target_ip.strip().lower() in ("ipv6", "v6", "auto-ipv6", "6"):
+            try:
+                details = self.node_get_details(target_id)
+                connect = details.get("connect") or {}
+                candidate = connect.get("publicIpv6") or connect.get("ipv6")
+                if candidate:
+                    target_ip = candidate
+            except Exception:
+                pass
+
+        params = {"ip": target_ip} if target_ip else None
         response = self._client.delete(f"/api/v1/nodes/{target_id}/network/ip", params=params)
         response.raise_for_status()
         return response.json()
+
+    detach_ip = node_detach_ip
 
     # --- Developer SSH Keys Endpoints ---
 

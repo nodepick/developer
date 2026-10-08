@@ -23,7 +23,7 @@ class TestNodepickClient(unittest.TestCase):
         call_args = mock_client.post.call_args
         self.assertEqual(call_args[0][0], "/api/v1/nodes")
         payload = call_args[1]["json"]
-        self.assertEqual(payload["memory"], 512 * 1024 * 1024)
+        self.assertEqual(payload["memory"], 1)
         self.assertEqual(payload["cpu"], 1)
         self.assertEqual(payload["networkType"], "private")
         self.assertEqual(payload["systemId"], "custom-host-id")
@@ -136,9 +136,9 @@ class TestNodepickClient(unittest.TestCase):
                     "cpu": {"cores": 16},
                     "memory_gb": 32,
                     "pricing": {
-                        "vcpu_micros_per_hour": 2000,
-                        "ram_gib_micros_per_hour": 1500,
-                        "storage_gib_micros_per_hour": 50,
+                        "hourly": "0.0060",
+                        "monthly": "4.41",
+                        "currency": "USD"
                     }
                 },
                 {
@@ -147,9 +147,9 @@ class TestNodepickClient(unittest.TestCase):
                     "cpu": {"cores": 32},
                     "memory_gb": 64,
                     "pricing": {
-                        "vcpu_micros_per_hour": 100000,
-                        "ram_gib_micros_per_hour": 100000,
-                        "storage_gib_micros_per_hour": 10000,
+                        "hourly": "0.0500",
+                        "monthly": "36.50",
+                        "currency": "USD"
                     }
                 }
             ]
@@ -171,8 +171,11 @@ class TestNodepickClient(unittest.TestCase):
 
         self.assertEqual(len(hosts), 1)
         self.assertEqual(hosts[0]["id"], "host-cheap")
-        self.assertTrue(hosts[0]["estimated_monthly_cost_usd"] < 20.0)
-        self.assertAlmostEqual(hosts[0]["estimated_monthly_cost_usd"], 8.03, places=2)
+        self.assertEqual(hosts[0]["pricing"]["hourly"], "0.0060")
+        self.assertEqual(hosts[0]["pricing"]["monthly"], "4.41")
+        self.assertEqual(hosts[0]["pricing"]["currency"], "USD")
+        self.assertEqual(hosts[0]["estimated_hourly_cost_usd"], 0.0060)
+        self.assertEqual(hosts[0]["estimated_monthly_cost_usd"], 4.41)
 
         get_params = mock_client.get.call_args[1]["params"]
         self.assertEqual(get_params["min_cpu"], 2)
@@ -214,16 +217,31 @@ class TestNodepickClient(unittest.TestCase):
                 json={"ip": "auto"}
             )
 
-            # Attach auto-ipv6
+            # Attach auto-ipv6 via string
             client.node_attach_ip("node-uuid-123", ip="auto-ipv6")
             self.assertEqual(mock_client.post.call_args[1]["json"], {"ip": "auto-ipv6"})
 
+            # Auto-detect via ip="ipv6"
+            client.attach_ip("node-uuid-123", ip="ipv6")
+            self.assertEqual(mock_client.post.call_args[1]["json"], {"ip": "auto-ipv6"})
+
+            # Auto-detect via version=6
+            client.attach_ip("node-uuid-123", version=6)
+            self.assertEqual(mock_client.post.call_args[1]["json"], {"ip": "auto-ipv6"})
+
             # Detach IP
-            detach_res = client.node_detach_ip("node-uuid-123")
+            detach_res = client.detach_ip("node-uuid-123")
             self.assertEqual(detach_res["status"], "detached")
-            mock_client.delete.assert_called_once_with(
+            mock_client.delete.assert_called_with(
                 "/api/v1/nodes/node-uuid-123/network/ip",
                 params=None
+            )
+
+            # Detach specific IPv6
+            client.detach_ip("node-uuid-123", ip="2001:470::1")
+            mock_client.delete.assert_called_with(
+                "/api/v1/nodes/node-uuid-123/network/ip",
+                params={"ip": "2001:470::1"}
             )
 
         client.close()
@@ -269,7 +287,12 @@ class TestNodepickClient(unittest.TestCase):
         self.assertEqual(created["name"], "devnet")
         mock_client.post.assert_called_once()
         self.assertEqual(mock_client.post.call_args[0][0], "/api/v1/networking")
-        self.assertEqual(mock_client.post.call_args[1]["json"]["name"], "devnet")
+        post_json = mock_client.post.call_args[1]["json"]
+        self.assertEqual(post_json["name"], "devnet")
+        self.assertEqual(post_json["region"], "fmt1")
+        self.assertNotIn("availabilityZone", post_json)
+        self.assertNotIn("subnet", post_json)
+        self.assertNotIn("gateway", post_json)
 
         def mock_get_handler(url, **kwargs):
             if url == "/api/v1/networking":
@@ -385,6 +408,106 @@ class TestNodepickClient(unittest.TestCase):
             self.assertIsInstance(mcp_client, NodepickMCPClient)
             self.assertEqual(mcp_client.url, "https://fmt1-sr3.entic.net:10010")
             self.assertEqual(mcp_client.api_key, "secret-mcp-key")
+        client.close()
+
+    @patch("httpx.Client")
+    def test_node_create_default_memory_one_gb(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"vm": {"id": "vm-def-1"}}
+        mock_resp.raise_for_status = MagicMock()
+        mock_client.post.return_value = mock_resp
+
+        client = NodePickClient(api_key="test-key")
+        client.node_create(system_id="host-def")
+        payload = mock_client.post.call_args[1]["json"]
+        # Default memory must be 1 (representing 1 GB)
+        self.assertEqual(payload["memory"], 1)
+
+        # Custom memory in GB
+        client.node_create(memory=4, system_id="host-def")
+        payload_custom = mock_client.post.call_args[1]["json"]
+        self.assertEqual(payload_custom["memory"], 4)
+    @patch("httpx.Client")
+    def test_node_create_enforces_minimums(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"vm": {"id": "vm-min-1"}}
+        mock_resp.raise_for_status = MagicMock()
+        mock_client.post.return_value = mock_resp
+
+        client = NodePickClient(api_key="test-key")
+
+        # Memory less than 1 GB (tested as GB value, MB value, and bytes value)
+        with self.assertRaises(ValueError) as ctx:
+            client.node_create(memory=0.5, system_id="host-1")
+        self.assertIn("Memory must be at least 1 GB", str(ctx.exception))
+
+        with self.assertRaises(ValueError) as ctx:
+            client.node_create(memory=512, system_id="host-1")
+        self.assertIn("Memory must be at least 1 GB", str(ctx.exception))
+
+        with self.assertRaises(ValueError) as ctx:
+            client.node_create(memory=512 * 1024 * 1024, system_id="host-1")
+        self.assertIn("Memory must be at least 1 GB", str(ctx.exception))
+
+        # CPU less than 1
+        with self.assertRaises(ValueError) as ctx:
+            client.node_create(cpu=0, system_id="host-1")
+        self.assertIn("CPU must be at least 1 vCPU", str(ctx.exception))
+
+        # Storage less than 10 GB
+        with self.assertRaises(ValueError) as ctx:
+            client.node_create(storage_gb=5, system_id="host-1")
+        self.assertIn("Storage must be at least 10 GB", str(ctx.exception))
+
+        # Valid minimums succeed
+        res = client.node_create(memory=1, cpu=1, storage_gb=10, system_id="host-1")
+        self.assertEqual(res["id"], "vm-min-1")
+        client.close()
+
+    @patch("httpx.Client")
+    def test_find_compute_upstream_pricing_used_directly(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "hosts": [
+                {
+                    "id": "host-1",
+                    "region": "us-west-1",
+                    "datacenter": "fmt1",
+                    "pricing": {
+                        "hourly": "0.0060",
+                        "monthly": "4.41",
+                        "currency": "USD"
+                    }
+                }
+            ]
+        }
+        mock_resp.raise_for_status = MagicMock()
+        mock_client.get.return_value = mock_resp
+
+        client = NodePickClient(api_key="test-key")
+        hosts = client.find_compute(min_cpu=1, min_memory_gb=1, min_storage_gb=10)
+        self.assertEqual(len(hosts), 1)
+        host = hosts[0]
+        # Upstream pricing dictionary is used directly without client-side calculation
+        self.assertEqual(host["pricing"]["hourly"], "0.0060")
+        self.assertEqual(host["pricing"]["monthly"], "4.41")
+        self.assertEqual(host["pricing"]["currency"], "USD")
+        self.assertEqual(host["estimated_hourly_cost_usd"], 0.0060)
+        self.assertEqual(host["estimated_monthly_cost_usd"], 4.41)
+        self.assertEqual(host["requested_cpu"], 1)
+        self.assertEqual(host["requested_memory_gb"], 1.0)
+        self.assertEqual(host["requested_storage_gb"], 10)
+
+        # Calling find_compute() with no arguments defaults params to 1 vCPU, 1 GB RAM, 10 GB Disk
+        client.find_compute()
+        default_params = mock_client.get.call_args[1]["params"]
+        self.assertEqual(default_params["min_cpu"], 1)
+        self.assertEqual(default_params["min_memory_gb"], 1)
+        self.assertEqual(default_params["min_storage_gb"], 10)
+
         client.close()
 
 if __name__ == "__main__":
