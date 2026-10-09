@@ -338,8 +338,9 @@ class TestCliCommands(unittest.TestCase):
             self.assertIn("vpc-1", result.output)
             self.assertIn("prod-net", result.output)
             self.assertIn("10.0.1.0/24", result.output)
-            # Verify AZ column is not present
+            # Verify AZ and NAT columns are not present
             self.assertNotIn(" AZ ", result.output)
+            self.assertNotIn(" NAT ", result.output)
 
     def test_network_create(self):
         from unittest.mock import patch, MagicMock
@@ -354,13 +355,26 @@ class TestCliCommands(unittest.TestCase):
                 name="devnet",
                 region="fmt1",
                 description=None,
-                enable_outbound_nat=True,
+            )
+
+            # Verify VPC name with dashes (e.g. dev-vpc)
+            result_dash = runner.invoke(app, ["network", "create", "dev-vpc", "--region", "fmt1"])
+            self.assertEqual(result_dash.exit_code, 0)
+            mock_client.vpc_create.assert_called_with(
+                name="dev-vpc",
+                region="fmt1",
+                description=None,
             )
 
             # Verify --az option is no longer supported
             result_az = runner.invoke(app, ["network", "create", "devnet", "--region", "fmt1", "--az", "zone1"])
             self.assertNotEqual(result_az.exit_code, 0)
             self.assertIn("No such option: --az", result_az.output)
+
+            # Verify --nat option is no longer supported
+            result_nat = runner.invoke(app, ["network", "create", "devnet", "--region", "fmt1", "--nat"])
+            self.assertNotEqual(result_nat.exit_code, 0)
+            self.assertIn("No such option: --nat", result_nat.output)
 
     def test_network_get(self):
         from unittest.mock import patch, MagicMock
@@ -387,12 +401,13 @@ class TestCliCommands(unittest.TestCase):
             self.assertEqual(result.exit_code, 0)
             self.assertIn("VPC network vpc-123 deleted", result.output)
 
-    def test_node_find_command(self):
+    def test_compute_command(self):
         from unittest.mock import patch, MagicMock
         mock_client = MagicMock()
         mock_client.find_compute.return_value = [
             {
                 "id": "host-1",
+                "status": "active",
                 "region": "fmt1",
                 "datacenter": "facility-1",
                 "memory_gb": 32,
@@ -406,38 +421,66 @@ class TestCliCommands(unittest.TestCase):
                     "monthly": "10.95",
                     "currency": "USD"
                 }
+            },
+            {
+                "id": "host-2",
+                "status": "reservable",
+                "region": "fmt1",
+                "datacenter": "facility-2",
+                "memory_gb": 64,
+                "storage_gb": 1000,
+                "cpu": {"cores": 32},
+                "requested_cpu": 2,
+                "requested_memory_gb": 4,
+                "requested_storage_gb": 50,
+                "pricing": {
+                    "hourly": "0.0200",
+                    "monthly": "14.60",
+                    "currency": "USD"
+                }
             }
         ]
-        with patch("nodepick_cli.commands.node.get_client", return_value=mock_client):
-            # Test 'np node find'
-            result = runner.invoke(app, ["node", "find", "-c", "2", "-m", "4", "-s", "50", "-p", "50"], env={"COLUMNS": "160"})
+        with patch("nodepick_cli.commands.compute.get_client", return_value=mock_client):
+            # Test 'np compute'
+            result = runner.invoke(app, ["compute", "-c", "2", "-m", "4", "-s", "50", "-p", "50"], env={"COLUMNS": "160"})
             self.assertEqual(result.exit_code, 0)
             # Verify required columns are present in output:
-            # host id, region, datacenter, ram, disk, cpu, price-per-hour, price-per-month
+            # host id (full), status, region, datacenter, consolidated specs (RAM/Disk/CPU), price-per-hour, price-per-month
             self.assertIn("Host ID", result.output)
+            self.assertIn("Status", result.output)
             self.assertIn("Region", result.output)
             self.assertIn("Datacenter", result.output)
-            self.assertIn("RAM (GB)", result.output)
-            self.assertIn("Disk (GB)", result.output)
-            self.assertIn("CPU (Cores)", result.output)
+            self.assertIn("RAM/Disk/CPU", result.output)
             self.assertIn("Price/hr ($)", result.output)
             self.assertIn("Price/mo ($)", result.output)
             self.assertIn("host-1", result.output)
+            self.assertIn("host-2", result.output)
+            self.assertIn("active", result.output)
+            self.assertIn("reservable", result.output)
             self.assertIn("fmt1", result.output)
             self.assertIn("facility-1", result.output)
             self.assertIn("$0.0150", result.output)
             self.assertIn("$10.95", result.output)
 
-            # Verify requested values (4, 50, 2) are displayed, NOT host capacity (32, 500, 16)
-            self.assertIn("4", result.output)
-            self.assertIn("50", result.output)
-            self.assertIn("2", result.output)
+            # Verify consolidated requested specs "4/50/2" (4 GB RAM, 50 GB Disk, 2 CPU cores)
+            self.assertIn("4/50/2", result.output)
 
-            # Test shortcut 'np find'
-            res_shortcut = runner.invoke(app, ["find", "-c", "2", "-m", "4", "-s", "50"], env={"COLUMNS": "160"})
-            self.assertEqual(res_shortcut.exit_code, 0)
-            self.assertIn("Host ID", res_shortcut.output)
-            self.assertIn("$0.0150", res_shortcut.output)
+            # Test filter with --status reservable
+            mock_client.find_compute.reset_mock()
+            res_reservable = runner.invoke(app, ["compute", "--status", "reservable"], env={"COLUMNS": "160"})
+            self.assertEqual(res_reservable.exit_code, 0)
+            mock_client.find_compute.assert_called_once()
+            self.assertEqual(mock_client.find_compute.call_args[1]["status"], "reservable")
+
+            # Verify 'np find' is no longer supported (renamed to 'np compute')
+            res_find = runner.invoke(app, ["find"])
+            self.assertNotEqual(res_find.exit_code, 0)
+            self.assertIn("No such command 'find'", res_find.output)
+
+            # Verify 'np node find' is no longer supported
+            res_node_find = runner.invoke(app, ["node", "find"])
+            self.assertNotEqual(res_node_find.exit_code, 0)
+            self.assertIn("No such command 'find'", res_node_find.output)
 
     def test_node_create_with_vpc_and_no_network_flag(self):
         from unittest.mock import patch, MagicMock
@@ -454,6 +497,8 @@ class TestCliCommands(unittest.TestCase):
                 display_name="my-node",
                 storage_gb=None,
                 vpc="devnet",
+                region=None,
+                host_id=None,
             )
 
             # 2. Create with custom --memory 2
@@ -466,22 +511,148 @@ class TestCliCommands(unittest.TestCase):
                 display_name="my-node-2",
                 storage_gb=None,
                 vpc=None,
+                region=None,
+                host_id=None,
             )
 
-            # 3. Verify --network option no longer exists
+            # 3. Create with --region fmt1 and -r us-west-1
+            mock_client.node_create.reset_mock()
+            result_reg = runner.invoke(app, ["node", "create", "--name", "my-node-reg", "--region", "fmt1"])
+            self.assertEqual(result_reg.exit_code, 0)
+            mock_client.node_create.assert_called_once_with(
+                memory=1,
+                cpu=1,
+                display_name="my-node-reg",
+                storage_gb=None,
+                vpc=None,
+                region="fmt1",
+                host_id=None,
+            )
+
+            mock_client.node_create.reset_mock()
+            result_reg_short = runner.invoke(app, ["node", "create", "--name", "my-node-reg2", "-r", "us-west-1"])
+            self.assertEqual(result_reg_short.exit_code, 0)
+            mock_client.node_create.assert_called_once_with(
+                memory=1,
+                cpu=1,
+                display_name="my-node-reg2",
+                storage_gb=None,
+                vpc=None,
+                region="us-west-1",
+                host_id=None,
+            )
+
+            # 4. Verify --network option no longer exists
             result_invalid = runner.invoke(app, ["node", "create", "--network", "public"])
             self.assertNotEqual(result_invalid.exit_code, 0)
             self.assertIn("No such option: --network", result_invalid.output)
 
-            # 4. Verify min constraints in CLI (cpu >= 1, memory >= 1 GB, storage >= 10 GB)
+            # 5. Verify min constraints in CLI (cpu >= 1, memory >= 1 GB, storage >= 10 GB)
             res_bad_cpu = runner.invoke(app, ["node", "create", "--cpu", "0"])
             self.assertNotEqual(res_bad_cpu.exit_code, 0)
+
+    def test_node_create_with_specific_host_id(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.node_create.return_value = {"vm_uuid": "node-pinned-123"}
+        with patch("nodepick_cli.commands.node.get_client", return_value=mock_client):
+            # 1. Using --host
+            result = runner.invoke(app, ["node", "create", "--name", "pinned-node", "--host", "39e77410-ddf4-44aa-bbcc-1234567890ab"])
+            self.assertEqual(result.exit_code, 0)
+            self.assertIn("Node created successfully", result.output)
+            mock_client.node_create.assert_called_once_with(
+                memory=1,
+                cpu=1,
+                display_name="pinned-node",
+                storage_gb=None,
+                vpc=None,
+                region=None,
+                host_id="39e77410-ddf4-44aa-bbcc-1234567890ab",
+            )
+
+            # 2. Using --host-id
+            mock_client.node_create.reset_mock()
+            result_host_id = runner.invoke(app, ["node", "create", "--name", "pinned-2", "--host-id", "custom-host-id"])
+            self.assertEqual(result_host_id.exit_code, 0)
+            mock_client.node_create.assert_called_once_with(
+                memory=1,
+                cpu=1,
+                display_name="pinned-2",
+                storage_gb=None,
+                vpc=None,
+                region=None,
+                host_id="custom-host-id",
+            )
+
+            # 3. Using --system-id
+            mock_client.node_create.reset_mock()
+            result_sys_id = runner.invoke(app, ["node", "create", "--name", "pinned-3", "--system-id", "sys-host-id"])
+            self.assertEqual(result_sys_id.exit_code, 0)
+            mock_client.node_create.assert_called_once_with(
+                memory=1,
+                cpu=1,
+                display_name="pinned-3",
+                storage_gb=None,
+                vpc=None,
+                region=None,
+                host_id="sys-host-id",
+            )
 
             res_bad_mem = runner.invoke(app, ["node", "create", "--memory", "0"])
             self.assertNotEqual(res_bad_mem.exit_code, 0)
 
             res_bad_storage = runner.invoke(app, ["node", "create", "--storage", "5"])
             self.assertNotEqual(res_bad_storage.exit_code, 0)
+
+    def test_node_create_unsupported_region(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.get_available_regions.return_value = [
+            {"id": "us-west-1", "name": "US West", "datacenters": ["fmt1"], "status": "active"},
+            {"id": "us-east-1", "name": "US East", "datacenters": ["iad1"], "status": "active"},
+        ]
+        with patch("nodepick_cli.commands.node.get_client", return_value=mock_client):
+            result = runner.invoke(app, ["node", "create", "--region", "unsupported-region"])
+            self.assertNotEqual(result.exit_code, 0)
+            self.assertIn("Unsupported region 'unsupported-region'", result.output)
+            self.assertIn("Supported regions", result.output)
+            self.assertIn("us-east-1", result.output)
+
+    def test_network_create_unsupported_region(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.get_available_regions.return_value = [
+            {"id": "us-west-1", "name": "US West", "datacenters": ["fmt1"], "status": "active"},
+        ]
+        with patch("nodepick_cli.commands.network.get_client", return_value=mock_client):
+            result = runner.invoke(app, ["network", "create", "test-vpc", "--region", "unsupported-region"])
+            self.assertNotEqual(result.exit_code, 0)
+            self.assertIn("Unsupported region 'unsupported-region'", result.output)
+
+    def test_top_level_regions_command(self):
+        from unittest.mock import patch, MagicMock
+        mock_client = MagicMock()
+        mock_client.get_available_regions.return_value = [
+            {
+                "id": "us-west-1",
+                "name": "US West (Silicon Valley)",
+                "datacenters": ["fmt1"],
+                "location": "Silicon Valley",
+            }
+        ]
+        with patch("nodepick_cli.commands.regions.get_client", return_value=mock_client):
+            # Test top-level np regions
+            res = runner.invoke(app, ["regions"])
+            self.assertEqual(res.exit_code, 0)
+            self.assertIn("us-west-1", res.output)
+            self.assertIn("fmt1", res.output)
+            self.assertIn("Silicon Valley", res.output)
+            self.assertNotIn("Status", res.output)
+
+        # Verify np node regions is no longer a command
+        res_node_regions = runner.invoke(app, ["node", "regions"])
+        self.assertNotEqual(res_node_regions.exit_code, 0)
+        self.assertIn("No such command", res_node_regions.output)
 
     def test_node_attach_and_detach_ip_ipv4(self):
         from unittest.mock import patch, MagicMock

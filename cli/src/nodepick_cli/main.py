@@ -1,6 +1,8 @@
 import typer
 from rich.console import Console
-from .commands.node import app as node_app, node_find
+from .commands.node import app as node_app
+from .commands.compute import compute_command
+from .commands.regions import regions_command
 from .commands.network import app as network_app
 from .commands.ssh import app as ssh_app
 from .commands.ai import app as ai_app
@@ -58,11 +60,16 @@ app.add_typer(network_app, name="network")
 app.add_typer(ssh_app, name="ssh")
 app.add_typer(ai_app, name="ai")
 
-# Shortcut: np find
+# Commands: np compute, np regions
 app.command(
-    "find",
+    "compute",
     help="Find and discover available compute hosts matching specific hardware and pricing criteria.",
-)(node_find)
+)(compute_command)
+
+app.command(
+    "regions",
+    help="List available compute regions.",
+)(regions_command)
 
 if __name__ == "__main__":
     app()

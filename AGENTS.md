@@ -172,10 +172,14 @@ Resource managers (files, commands, desktop, etc.) are created on first access v
 │           ├── auth/           # Login/logout & credential storage
 │           │   ├── __init__.py
 │           │   └── login.py
-│           ├── commands/       # Compute node management commands
+│           ├── commands/       # CLI commands
 │           │   ├── __init__.py
-│           │   ├── key.py
-│           │   └── node.py
+│           │   ├── ai.py
+│           │   ├── compute.py
+│           │   ├── network.py
+│           │   ├── node.py
+│           │   ├── regions.py
+│           │   └── ssh.py
 │           └── core/           # Config, exceptions & logging
 │               ├── __init__.py
 │               ├── config.py

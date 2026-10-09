@@ -7,6 +7,8 @@ if not logger.handlers:
     logger.addHandler(logging.NullHandler())
     logger.setLevel(logging.WARNING)
 
+__version__ = "0.1.4"
+
 from .client import NodePickClient
 from .mcp import NodepickMCPClient
 from .llm import (
@@ -34,7 +36,7 @@ def find_compute(
     max_price: Optional[float] = None,
     region: Optional[str] = None,
     datacenter: Optional[str] = None,
-    status: str = "active",
+    status: Optional[str] = None,
     gpu: Optional[bool] = None,
     page: Optional[int] = None,
     limit: Optional[int] = None,
@@ -53,6 +55,12 @@ def find_compute(
         limit=limit,
     )
 
+def list_regions() -> Dict[str, Any]:
+    return _get_default_client().list_regions()
+
+def get_available_regions(status: Optional[str] = None) -> List[Dict[str, Any]]:
+    return _get_default_client().get_available_regions(status=status)
+
 def vpc_list() -> List[Dict[str, Any]]:
     return _get_default_client().vpc_list()
 
@@ -60,14 +68,12 @@ def vpc_create(
     name: str,
     region: Optional[str] = None,
     description: Optional[str] = None,
-    enable_outbound_nat: bool = True,
     for_provision: Optional[bool] = None,
 ) -> Dict[str, Any]:
     return _get_default_client().vpc_create(
         name=name,
         region=region,
         description=description,
-        enable_outbound_nat=enable_outbound_nat,
         for_provision=for_provision,
     )
 
@@ -155,6 +161,7 @@ def key_delete(key_id: str) -> Dict[str, Any]:
     return _get_default_client().key_delete(key_id)
 
 __all__ = [
+    "__version__",
     "NodePickClient",
     "NodepickMCPClient",
     "AgentLoop",
@@ -163,6 +170,8 @@ __all__ = [
     "OpenAIProvider",
     "OllamaProvider",
     "find_compute",
+    "list_regions",
+    "get_available_regions",
     "vpc_list",
     "vpc_create",
     "vpc_get",

@@ -53,8 +53,17 @@ Check the official [`Documentation`](https://docs.nodepick.ai/cli-reference/over
 ### Basic Usage
 
 ```bash
-# List all compute nodes (table view with SSH connect command)
+# Check version
 np --version
+
+# List available regions
+np regions
+
+# Deploy a compute node in a specific region
+np node create --name dev-node --region us-west-1
+
+# List compute nodes
+np node list
 ```
 
 ### Authentication

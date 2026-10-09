@@ -2,7 +2,7 @@ import typer
 from typing import Optional
 from rich.console import Console
 from rich.table import Table
-import nodepick
+from ..commands.regions import validate_region
 from ..commands.node import get_client
 from ..core.exceptions import handle_error
 from ..core.formatters import OutputFormat, set_output_format, print_output
@@ -16,14 +16,13 @@ def _render_networks_table(networks):
         console.print("[yellow]No VPC networks found.[/yellow]")
         return
 
-    table = Table("ID", "Name", "Subnet", "Region", "NAT")
+    table = Table("ID", "Name", "Subnet", "Region")
     for net in networks:
         table.add_row(
             str(net.get("id") or "N/A"),
             str(net.get("name") or "N/A"),
             str(net.get("subnet") or "N/A"),
             str(net.get("region") or "-"),
-            "Enabled" if net.get("enableOutboundNat", True) else "Disabled",
         )
     console.print(table)
 
@@ -72,20 +71,20 @@ def network_list(
 
 @app.command("create")
 def network_create(
-    name: str = typer.Argument(..., help="Alphanumeric name for the VPC network"),
+    name: str = typer.Argument(..., help="Name for the VPC network (alphanumeric, dashes, and underscores)"),
     region: str = typer.Option(..., "--region", "-r", help="Target geographic region (e.g. us-west-1)"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Optional description"),
-    enable_nat: bool = typer.Option(True, "--nat/--no-nat", help="Enable outbound NAT gateway"),
 ):
     """Create a new VPC network."""
     client = get_client()
+    if region:
+        validate_region(client, region)
     try:
         console.print(f"[cyan]Creating VPC network '{name}'...[/cyan]")
         network = client.vpc_create(
             name=name,
             region=region,
             description=description,
-            enable_outbound_nat=enable_nat,
         )
         vpc_id = network.get("id")
         console.print(f"[bold green]VPC network created successfully![/bold green] ID: {vpc_id}")

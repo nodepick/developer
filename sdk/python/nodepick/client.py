@@ -136,7 +136,7 @@ class NodePickClient:
         max_price: Optional[float] = None,
         region: Optional[str] = None,
         datacenter: Optional[str] = None,
-        status: str = "active",
+        status: Optional[str] = None,
         gpu: Optional[bool] = None,
         page: Optional[int] = None,
         limit: Optional[int] = None,
@@ -220,6 +220,16 @@ class NodePickClient:
         response.raise_for_status()
         return response.json()
 
+    def get_available_regions(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List available compute regions with status 'active' or 'reservable' (`GET /api/v1/regions`)."""
+        params = {}
+        if status:
+            params["status"] = status
+        response = self._client.get("/api/v1/regions", params=params)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("regions", []) if isinstance(data, dict) else []
+
     # --- VPC Networks Endpoints ---
 
     def resolve_vpc_id(self, vpc_identifier: Union[str, Dict[str, Any]]) -> str:
@@ -254,20 +264,43 @@ class NodePickClient:
         data = response.json()
         return data.get("networks", []) if isinstance(data, dict) else []
 
+    def _validate_region(self, region: str) -> None:
+        """Validate region against available regions if regions are returned by the API."""
+        if not region:
+            return
+        try:
+            regions = self.get_available_regions()
+            if isinstance(regions, list) and len(regions) > 0:
+                valid_ids = set()
+                for r in regions:
+                    if isinstance(r, dict):
+                        if r.get("id"):
+                            valid_ids.add(str(r["id"]).lower())
+                        for dc in r.get("datacenters") or []:
+                            valid_ids.add(str(dc).lower())
+                if valid_ids and region.lower() not in valid_ids:
+                    sorted_ids = sorted(list({str(r.get("id")) for r in regions if isinstance(r, dict) and r.get("id")}))
+                    raise ValueError(
+                        f"Unsupported region '{region}'. Supported regions are: {', '.join(sorted_ids)}"
+                    )
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.debug(f"Region validation check skipped: {e}")
+
     def vpc_create(
         self,
         name: str,
         region: Optional[str] = None,
         description: Optional[str] = None,
-        enable_outbound_nat: bool = True,
         for_provision: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Create a new VPC network (`POST /api/v1/networking`)."""
         payload: Dict[str, Any] = {
             "name": name,
-            "enableOutboundNat": enable_outbound_nat,
         }
         if region is not None:
+            self._validate_region(region)
             payload["region"] = region
         if description is not None:
             payload["description"] = description
@@ -335,6 +368,7 @@ class NodePickClient:
         if storage_gb is not None:
             payload["storageGb"] = storage_gb
         if region is not None:
+            self._validate_region(region)
             payload["region"] = region
 
         # Resolve VPC network if specified

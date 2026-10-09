@@ -83,104 +83,7 @@ def _render_nodes_table(nodes, client=None):
     console.print(table)
 
 
-def _render_compute_hosts_table(hosts):
-    if not hosts:
-        console.print("[yellow]No compute hosts found matching criteria.[/yellow]")
-        return
 
-    table = Table(
-        "Host ID",
-        "Region",
-        "Datacenter",
-        "RAM (GB)",
-        "Disk (GB)",
-        "CPU (Cores)",
-        "Price/hr ($)",
-        "Price/mo ($)",
-    )
-    for host in hosts:
-        # Show requested specs (RAM, CPU, and Disk) for which pricing was evaluated,
-        # rather than the compute host's total reported capacity.
-        req_cpu = host.get("requested_cpu")
-        if req_cpu is None:
-            cpu_info = host.get("cpu", {})
-            req_cpu = cpu_info.get("cores") if isinstance(cpu_info, dict) else cpu_info
-
-        req_mem = host.get("requested_memory_gb")
-        if req_mem is None:
-            req_mem = host.get("memory_gb")
-        elif isinstance(req_mem, (int, float)) and req_mem == int(req_mem):
-            req_mem = int(req_mem)
-
-        req_disk = host.get("requested_storage_gb")
-        if req_disk is None:
-            req_disk = host.get("storage_gb")
-
-        pricing = host.get("pricing") if isinstance(host.get("pricing"), dict) else {}
-        hourly = pricing.get("hourly") or pricing.get("hour") or host.get("estimated_hourly_cost_usd")
-        monthly = pricing.get("monthly") or host.get("estimated_monthly_cost_usd")
-
-        if hourly is not None:
-            try:
-                hourly_str = f"${float(hourly):.4f}"
-            except (ValueError, TypeError):
-                hourly_str = f"${hourly}"
-        else:
-            hourly_str = "N/A"
-
-        if monthly is not None:
-            try:
-                monthly_str = f"${float(monthly):.2f}"
-            except (ValueError, TypeError):
-                monthly_str = f"${monthly}"
-        else:
-            monthly_str = "N/A"
-
-        table.add_row(
-            str(host.get("id") or "N/A"),
-            str(host.get("region") or "N/A"),
-            str(host.get("datacenter") or "N/A"),
-            str(req_mem if req_mem is not None else "N/A"),
-            str(req_disk if req_disk is not None else "N/A"),
-            str(req_cpu if req_cpu is not None else "N/A"),
-            hourly_str,
-            monthly_str,
-        )
-    console.print(table)
-
-
-@app.command("find")
-def node_find(
-    cpu: Optional[int] = typer.Option(None, "--cpu", "-c", help="Minimum CPU cores"),
-    memory_gb: Optional[float] = typer.Option(None, "--memory", "-m", help="Minimum RAM in GB"),
-    storage_gb: Optional[int] = typer.Option(None, "--storage", "-s", help="Minimum storage in GB"),
-    max_price: Optional[float] = typer.Option(None, "--max-price", "-p", help="Maximum monthly price in USD"),
-    region: Optional[str] = typer.Option(None, "--region", "-r", help="Filter by target region"),
-    datacenter: Optional[str] = typer.Option(None, "--datacenter", help="Filter by datacenter facility code"),
-    status: str = typer.Option("active", "--status", help="Filter by host status (active, reserved, all)"),
-    format: OutputFormat = typer.Option(
-        OutputFormat.TABLE,
-        "--format", "-f",
-        help="Output format (table or json).",
-        case_sensitive=False,
-    ),
-):
-    """Find and discover available compute hosts matching specific hardware and pricing criteria."""
-    set_output_format(format)
-    client = get_client()
-    try:
-        hosts = client.find_compute(
-            min_cpu=cpu,
-            min_memory_gb=memory_gb,
-            min_storage_gb=storage_gb,
-            max_price=max_price,
-            region=region,
-            datacenter=datacenter,
-            status=status,
-        )
-        print_output(hosts, table_render_func=_render_compute_hosts_table)
-    except Exception as e:
-        handle_error(e, "Error finding compute hosts")
 
 
 @app.command("boot")
@@ -197,6 +100,9 @@ def node_boot(
         handle_error(e, "Error booting node")
 
 
+from .regions import validate_region, _render_regions_table
+
+
 @app.command("create")
 def node_create(
     display_name: Optional[str] = typer.Option(None, "--name", "-n", help="Display name for the node"),
@@ -204,9 +110,13 @@ def node_create(
     memory: int = typer.Option(1, "--memory", "-m", min=1, help="Memory size in GB (min: 1, default: 1)"),
     storage_gb: Optional[int] = typer.Option(None, "--storage", min=10, help="Disk storage in GB (min: 10, default: 10)"),
     vpc: Optional[str] = typer.Option(None, "--vpc", help="VPC network ID or name to deploy node into"),
+    region: Optional[str] = typer.Option(None, "--region", "-r", help="Target geographic region (e.g. us-west-1, fmt1)"),
+    host_id: Optional[str] = typer.Option(None, "--host", "--host-id", "--system-id", help="Target Host ID to deploy onto"),
 ):
     """Deploy a new compute node."""
     client = get_client()
+    if region:
+        validate_region(client, region)
     try:
         console.print("[cyan]Creating node...[/cyan]")
         node = client.node_create(
@@ -215,8 +125,10 @@ def node_create(
             display_name=display_name,
             storage_gb=storage_gb,
             vpc=vpc,
+            region=region,
+            host_id=host_id,
         )
-        node_id = node.get("vm_uuid")
+        node_id = node.get("vm_uuid") or node.get("id")
         console.print(f"[bold green]Node created successfully![/bold green] ID: {node_id}")
     except Exception as e:
         handle_error(e, "Error creating node")

@@ -290,6 +290,7 @@ class TestNodepickClient(unittest.TestCase):
         post_json = mock_client.post.call_args[1]["json"]
         self.assertEqual(post_json["name"], "devnet")
         self.assertEqual(post_json["region"], "fmt1")
+        self.assertNotIn("enableOutboundNat", post_json)
         self.assertNotIn("availabilityZone", post_json)
         self.assertNotIn("subnet", post_json)
         self.assertNotIn("gateway", post_json)
@@ -502,11 +503,77 @@ class TestNodepickClient(unittest.TestCase):
         self.assertEqual(host["requested_storage_gb"], 10)
 
         # Calling find_compute() with no arguments defaults params to 1 vCPU, 1 GB RAM, 10 GB Disk
+        # and omits status filter so all hosts (active and reservable) are returned
         client.find_compute()
         default_params = mock_client.get.call_args[1]["params"]
         self.assertEqual(default_params["min_cpu"], 1)
         self.assertEqual(default_params["min_memory_gb"], 1)
         self.assertEqual(default_params["min_storage_gb"], 10)
+        self.assertNotIn("status", default_params)
+
+        # Calling find_compute(status="active") sends status="active"
+        client.find_compute(status="active")
+        self.assertEqual(mock_client.get.call_args[1]["params"]["status"], "active")
+
+        # Calling find_compute(status="reservable") sends status="reservable"
+        client.find_compute(status="reservable")
+        self.assertEqual(mock_client.get.call_args[1]["params"]["status"], "reservable")
+
+        client.close()
+
+    @patch("httpx.Client")
+    def test_node_create_with_region(self, mock_client_cls):
+        mock_client = mock_client_cls.return_value
+        
+        # Mock GET /api/v1/regions
+        mock_regions_resp = MagicMock()
+        mock_regions_resp.json.return_value = {
+            "regions": [
+                {"id": "us-west-1", "name": "US West", "datacenters": ["fmt1"]}
+            ]
+        }
+        mock_regions_resp.raise_for_status = MagicMock()
+
+        # Mock GET /api/v1/compute
+        mock_compute_resp = MagicMock()
+        mock_compute_resp.json.return_value = {
+            "hosts": [
+                {"id": "host-fmt1", "region": "us-west-1", "cpu": {"cores": 16}, "memory_gb": 32}
+            ]
+        }
+        mock_compute_resp.raise_for_status = MagicMock()
+
+        def mock_get(url, **kwargs):
+            if "/api/v1/regions" in url:
+                return mock_regions_resp
+            if "/api/v1/compute" in url:
+                return mock_compute_resp
+            return MagicMock()
+
+        mock_client.get.side_effect = mock_get
+
+        mock_post_resp = MagicMock()
+        mock_post_resp.json.return_value = {"vm": {"id": "vm-reg-1", "region": "us-west-1"}}
+        mock_post_resp.raise_for_status = MagicMock()
+        mock_client.post.return_value = mock_post_resp
+
+        client = NodePickClient(api_key="test-key")
+        res = client.node_create(region="us-west-1")
+        self.assertEqual(res["id"], "vm-reg-1")
+
+        post_payload = mock_client.post.call_args[1]["json"]
+        self.assertEqual(post_payload["region"], "us-west-1")
+
+        # Unsupported region raises ValueError
+        with self.assertRaises(ValueError) as ctx:
+            client.node_create(region="unsupported-reg")
+        self.assertIn("Unsupported region 'unsupported-reg'", str(ctx.exception))
+        self.assertIn("us-west-1", str(ctx.exception))
+
+        # Unsupported region on vpc_create raises ValueError
+        with self.assertRaises(ValueError) as ctx2:
+            client.vpc_create(name="bad-vpc", region="unsupported-reg")
+        self.assertIn("Unsupported region 'unsupported-reg'", str(ctx2.exception))
 
         client.close()
 
