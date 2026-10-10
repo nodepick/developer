@@ -31,39 +31,8 @@ class TestNodepickClient(unittest.TestCase):
         client.close()
 
     @patch("httpx.Client")
-    def test_node_create_auto_picks_cheapest_smallest_host(self, mock_client_cls):
+    def test_node_create_lets_upstream_select_host(self, mock_client_cls):
         mock_client = mock_client_cls.return_value
-
-        # Mock GET /api/v1/compute with two candidate hosts
-        mock_get_resp = MagicMock()
-        mock_get_resp.json.return_value = {
-            "hosts": [
-                {
-                    "id": "expensive-big-host",
-                    "region": "us-west-1",
-                    "cpu": {"cores": 64},
-                    "memory_gb": 128,
-                    "pricing": {
-                        "vcpu_micros_per_hour": 10000,
-                        "ram_gib_micros_per_hour": 5000,
-                        "storage_gib_micros_per_hour": 100,
-                    }
-                },
-                {
-                    "id": "cheapest-small-host",
-                    "region": "fmt1",
-                    "cpu": {"cores": 16},
-                    "memory_gb": 32,
-                    "pricing": {
-                        "vcpu_micros_per_hour": 2000,
-                        "ram_gib_micros_per_hour": 1500,
-                        "storage_gib_micros_per_hour": 50,
-                    }
-                }
-            ]
-        }
-        mock_get_resp.raise_for_status = MagicMock()
-        mock_client.get.return_value = mock_get_resp
 
         mock_post_resp = MagicMock()
         mock_post_resp.json.return_value = {"vm": {"id": "vm-auto-123"}}
@@ -74,15 +43,15 @@ class TestNodepickClient(unittest.TestCase):
         node = client.node_create(cpu=2, memory=1024 * 1024 * 1024)
 
         self.assertEqual(node["id"], "vm-auto-123")
-        self.assertEqual(mock_client.get.call_count, 1)
-        compute_call = mock_client.get.call_args
-        self.assertEqual(compute_call[0][0], "/api/v1/compute")
-        self.assertEqual(compute_call[1]["params"]["status"], "active")
+        # Verify no redundant compute discovery GET call is made
+        mock_client.get.assert_not_called()
 
-        # Verify cheapest-small-host was selected and pinned as systemId
+        # Verify POST payload does NOT pin systemId, letting upstream scheduler decide
+        self.assertEqual(mock_client.post.call_count, 1)
         post_payload = mock_client.post.call_args[1]["json"]
-        self.assertEqual(post_payload["systemId"], "cheapest-small-host")
-        self.assertEqual(post_payload["region"], "fmt1")
+        self.assertNotIn("systemId", post_payload)
+        self.assertEqual(post_payload["cpu"], 2)
+        self.assertEqual(post_payload["memory"], 1024 * 1024 * 1024)
         client.close()
 
     @patch("httpx.Client")
@@ -352,37 +321,27 @@ class TestNodepickClient(unittest.TestCase):
         client.close()
 
     @patch("httpx.Client")
-    def test_node_delete_polls_until_gone(self, mock_client_cls):
+    def test_node_delete_returns_immediately_without_get(self, mock_client_cls):
         # Setup mocks
         mock_client = mock_client_cls.return_value
         
         mock_delete_resp = MagicMock()
-        mock_delete_resp.json.return_value = {"status": "deleting"}
+        mock_delete_resp.json.return_value = {"status": "deleted"}
         mock_delete_resp.raise_for_status = MagicMock()
         
-        mock_get_resp_still = MagicMock()
-        mock_get_resp_still.status_code = 200
-        
-        mock_get_resp_deleted = MagicMock()
-        mock_get_resp_deleted.status_code = 502
-        
         mock_client.delete.return_value = mock_delete_resp
-        mock_client.get.side_effect = [
-            mock_get_resp_still,
-            mock_get_resp_deleted
-        ]
         
         client = NodePickClient(api_key="test-key")
         
         # Act
-        with patch.object(client, "node_list", return_value=[{"vm_uuid": "vm-123"}]), patch("time.sleep", MagicMock()) as mock_sleep:
+        with patch.object(client, "node_list", return_value=[{"vm_uuid": "vm-123"}]):
             res = client.node_delete("vm-123")
             
             # Assert
-            self.assertEqual(res["status"], "deleting")
+            self.assertEqual(res["status"], "deleted")
             mock_client.delete.assert_called_once_with("/api/v1/nodes/vm-123")
-            self.assertEqual(mock_client.get.call_count, 2)
-            mock_sleep.assert_called_once_with(1.0)
+            # Verify no subsequent GET requests were made
+            mock_client.get.assert_not_called()
             
         client.close()
 

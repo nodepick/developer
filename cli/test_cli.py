@@ -32,6 +32,17 @@ class TestCliCommands(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertIn("Manage Compute Nodes", result.output)
 
+        res_create = runner.invoke(app, ["node", "create", "--help"], env={"COLUMNS": "160"})
+        self.assertEqual(res_create.exit_code, 0)
+        self.assertIn("-s", res_create.output)
+        self.assertIn("--storage", res_create.output)
+        self.assertIn("Target region or datacenter (e.g. us-west-1, fmt1)", res_create.output)
+        self.assertIn("Number of vCPUs (min: 1) [default: 1]", res_create.output)
+        self.assertIn("Memory size in GB (min: 1) [default: 1]", res_create.output)
+        self.assertIn("Disk storage in GB (min: 10) [default: 10]", res_create.output)
+        self.assertNotIn("[x>=1]", res_create.output)
+        self.assertNotIn("[x>=10]", res_create.output)
+
     def test_node_get_help(self):
         result = runner.invoke(app, ["node", "get", "--help"])
         self.assertEqual(result.exit_code, 0)
@@ -495,7 +506,7 @@ class TestCliCommands(unittest.TestCase):
                 memory=1,
                 cpu=1,
                 display_name="my-node",
-                storage_gb=None,
+                storage_gb=10,
                 vpc="devnet",
                 region=None,
                 host_id=None,
@@ -509,7 +520,7 @@ class TestCliCommands(unittest.TestCase):
                 memory=2,
                 cpu=1,
                 display_name="my-node-2",
-                storage_gb=None,
+                storage_gb=10,
                 vpc=None,
                 region=None,
                 host_id=None,
@@ -523,7 +534,7 @@ class TestCliCommands(unittest.TestCase):
                 memory=1,
                 cpu=1,
                 display_name="my-node-reg",
-                storage_gb=None,
+                storage_gb=10,
                 vpc=None,
                 region="fmt1",
                 host_id=None,
@@ -536,20 +547,63 @@ class TestCliCommands(unittest.TestCase):
                 memory=1,
                 cpu=1,
                 display_name="my-node-reg2",
-                storage_gb=None,
+                storage_gb=10,
                 vpc=None,
                 region="us-west-1",
                 host_id=None,
             )
 
-            # 4. Verify --network option no longer exists
+            # 4. Create with --storage and short -s
+            mock_client.node_create.reset_mock()
+            result_storage = runner.invoke(app, ["node", "create", "--name", "my-node-stor", "--storage", "25"])
+            self.assertEqual(result_storage.exit_code, 0)
+            mock_client.node_create.assert_called_once_with(
+                memory=1,
+                cpu=1,
+                display_name="my-node-stor",
+                storage_gb=25,
+                vpc=None,
+                region=None,
+                host_id=None,
+            )
+
+            mock_client.node_create.reset_mock()
+            result_storage_short = runner.invoke(app, ["node", "create", "--name", "my-node-stor2", "-s", "30"])
+            self.assertEqual(result_storage_short.exit_code, 0)
+            mock_client.node_create.assert_called_once_with(
+                memory=1,
+                cpu=1,
+                display_name="my-node-stor2",
+                storage_gb=30,
+                vpc=None,
+                region=None,
+                host_id=None,
+            )
+
+            mock_client.node_create.reset_mock()
+            result_combo = runner.invoke(app, ["node", "create", "-n", "combo-node", "-c", "2", "-m", "4", "-s", "50", "-r", "us-west-1"])
+            self.assertEqual(result_combo.exit_code, 0)
+            mock_client.node_create.assert_called_once_with(
+                memory=4,
+                cpu=2,
+                display_name="combo-node",
+                storage_gb=50,
+                vpc=None,
+                region="us-west-1",
+                host_id=None,
+            )
+
+            # 5. Verify --network option no longer exists
             result_invalid = runner.invoke(app, ["node", "create", "--network", "public"])
             self.assertNotEqual(result_invalid.exit_code, 0)
             self.assertIn("No such option: --network", result_invalid.output)
 
-            # 5. Verify min constraints in CLI (cpu >= 1, memory >= 1 GB, storage >= 10 GB)
+            # 6. Verify min constraints in CLI (cpu >= 1, memory >= 1 GB, storage >= 10 GB)
             res_bad_cpu = runner.invoke(app, ["node", "create", "--cpu", "0"])
             self.assertNotEqual(res_bad_cpu.exit_code, 0)
+
+            res_bad_storage_short = runner.invoke(app, ["node", "create", "-s", "5"])
+            self.assertNotEqual(res_bad_storage_short.exit_code, 0)
 
     def test_node_create_with_specific_host_id(self):
         from unittest.mock import patch, MagicMock
@@ -564,7 +618,7 @@ class TestCliCommands(unittest.TestCase):
                 memory=1,
                 cpu=1,
                 display_name="pinned-node",
-                storage_gb=None,
+                storage_gb=10,
                 vpc=None,
                 region=None,
                 host_id="39e77410-ddf4-44aa-bbcc-1234567890ab",
@@ -578,7 +632,7 @@ class TestCliCommands(unittest.TestCase):
                 memory=1,
                 cpu=1,
                 display_name="pinned-2",
-                storage_gb=None,
+                storage_gb=10,
                 vpc=None,
                 region=None,
                 host_id="custom-host-id",
@@ -592,7 +646,7 @@ class TestCliCommands(unittest.TestCase):
                 memory=1,
                 cpu=1,
                 display_name="pinned-3",
-                storage_gb=None,
+                storage_gb=10,
                 vpc=None,
                 region=None,
                 host_id="sys-host-id",

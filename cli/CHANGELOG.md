@@ -3,6 +3,7 @@
 ## [0.1.4] - 2026-10-08
 
 ### Added
+- Added short option `-s` alias to `--storage` on `np node create`.
 - Added `--region` (`-r`) option to `np node create` to specify the deployment region.
 - Added `--host` option to `np node create` to deploy directly onto a specified compute Host ID.
 - Added region validation against supported active regions for `np node create` and `np network create`.
@@ -15,6 +16,8 @@
 - Changed authentication command from `np auth save` to `np auth configure`.
 - Replaced `np find` and `np node find` with top-level `np compute`.
 - Removed NAT configuration options from `np network` commands (outbound NAT enabled upstream by default).
+- Updated `--region` help message on `np node create` and `np network create` to "Target region or datacenter (e.g. us-west-1, fmt1)".
+- Cleaned option type formatting in `np node create` help output (removed redundant `[x>=...]` range tags).
 
 ## [0.1.0] - 2026-07-31
 

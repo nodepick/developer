@@ -103,14 +103,32 @@ def node_boot(
 from .regions import validate_region, _render_regions_table
 
 
+def _validate_cpu(val: int) -> int:
+    if val < 1:
+        raise typer.BadParameter("Number of vCPUs must be at least 1.")
+    return val
+
+
+def _validate_memory(val: int) -> int:
+    if val < 1:
+        raise typer.BadParameter("Memory size must be at least 1 GB.")
+    return val
+
+
+def _validate_storage(val: int) -> int:
+    if val < 10:
+        raise typer.BadParameter("Disk storage must be at least 10 GB.")
+    return val
+
+
 @app.command("create")
 def node_create(
     display_name: Optional[str] = typer.Option(None, "--name", "-n", help="Display name for the node"),
-    cpu: int = typer.Option(1, "--cpu", "-c", min=1, help="Number of vCPUs (min: 1)"),
-    memory: int = typer.Option(1, "--memory", "-m", min=1, help="Memory size in GB (min: 1, default: 1)"),
-    storage_gb: Optional[int] = typer.Option(None, "--storage", min=10, help="Disk storage in GB (min: 10, default: 10)"),
+    cpu: int = typer.Option(1, "--cpu", "-c", callback=_validate_cpu, help="Number of vCPUs (min: 1)"),
+    memory: int = typer.Option(1, "--memory", "-m", callback=_validate_memory, help="Memory size in GB (min: 1)"),
+    storage_gb: int = typer.Option(10, "--storage", "-s", callback=_validate_storage, help="Disk storage in GB (min: 10)"),
     vpc: Optional[str] = typer.Option(None, "--vpc", help="VPC network ID or name to deploy node into"),
-    region: Optional[str] = typer.Option(None, "--region", "-r", help="Target geographic region (e.g. us-west-1, fmt1)"),
+    region: Optional[str] = typer.Option(None, "--region", "-r", help="Target region or datacenter (e.g. us-west-1, fmt1)"),
     host_id: Optional[str] = typer.Option(None, "--host", "--host-id", "--system-id", help="Target Host ID to deploy onto"),
 ):
     """Deploy a new compute node."""

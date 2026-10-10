@@ -72,7 +72,7 @@ def network_list(
 @app.command("create")
 def network_create(
     name: str = typer.Argument(..., help="Name for the VPC network (alphanumeric, dashes, and underscores)"),
-    region: str = typer.Option(..., "--region", "-r", help="Target geographic region (e.g. us-west-1)"),
+    region: str = typer.Option(..., "--region", "-r", help="Target region or datacenter (e.g. us-west-1, fmt1)"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Optional description"),
 ):
     """Create a new VPC network."""

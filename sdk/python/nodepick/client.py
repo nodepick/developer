@@ -376,44 +376,10 @@ class NodePickClient:
         if target_vpc is not None:
             payload["networkId"] = self.resolve_vpc_id(target_vpc)
 
-        # Resolve target host (pinned) or auto-discover smallest & cheapest host
+        # Set systemId if explicitly specified; otherwise upstream scheduler selects host
         target_host = system_id or host_id
         if target_host is not None:
             payload["systemId"] = str(target_host)
-        else:
-            try:
-                req_cpu = max(cpu or 1, 1)
-                req_mem_gb = max(effective_mem_gb, 1.0)
-                req_storage_gb = max(storage_gb or 10, 10)
-
-                candidates = self.find_compute(
-                    min_cpu=req_cpu,
-                    min_memory_gb=req_mem_gb,
-                    min_storage_gb=req_storage_gb,
-                    max_price=max_price,
-                    region=region,
-                    status="active",
-                )
-
-                if candidates:
-                    def _rank_key(c: Dict[str, Any]):
-                        pricing = c.get("pricing") if isinstance(c.get("pricing"), dict) else {}
-                        monthly_val = pricing.get("monthly") or c.get("estimated_monthly_cost_usd")
-                        try:
-                            price = float(monthly_val) if monthly_val is not None else float("inf")
-                        except (ValueError, TypeError):
-                            price = float("inf")
-                        cores = c.get("cpu", {}).get("cores", 9999) if isinstance(c.get("cpu"), dict) else 9999
-                        mem = c.get("memory_gb", 9999)
-                        return (price, cores, mem)
-
-                    best_host = min(candidates, key=_rank_key)
-                    if best_host.get("id"):
-                        payload["systemId"] = best_host["id"]
-                        if not payload.get("region") and best_host.get("region"):
-                            payload["region"] = best_host["region"]
-            except Exception as e:
-                logger.debug(f"Compute discovery auto-selection skipped: {e}")
 
         response = self._client.post("/api/v1/nodes", json=payload)
         response.raise_for_status()
@@ -464,22 +430,7 @@ class NodePickClient:
         target_id = self.resolve_node_id(node_id)
         response = self._client.delete(f"/api/v1/nodes/{target_id}")
         response.raise_for_status()
-        res = response.json()
-
-        # Poll until node is fully deleted
-        while True:
-            try:
-                detail_resp = self._client.get(f"/api/v1/nodes/{target_id}")
-                if detail_resp.status_code in (404, 502):
-                    break
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code in (404, 502):
-                    break
-            except Exception:
-                break
-            time.sleep(1.0)
-
-        return res
+        return response.json()
 
     def node_shutdown(self, node_id: str) -> Dict[str, Any]:
         """Shutdown compute node (`POST /api/v1/nodes/[id]/shutdown`)."""
